@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>在线选课系统</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Cpath d='M8 21.5 16 9l8 12.5H8z' fill='%23fff'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <!-- 登录页 -->
+  <div id="login-page" class="login-page">
+    <div class="login-brand">
+      <div class="login-brand-inner">
+        <div class="brand-mark">选</div>
+        <h1>在线选课系统</h1>
+        <p class="brand-sub">基于 B/S 架构的课程选课平台</p>
+        <ul class="brand-points">
+          <li><span>批次错峰</span>按年级分时段开放，高年级优先</li>
+          <li><span>冲突检测</span>星期 + 节次区间 + 单双周三维判定</li>
+          <li><span>候补递补</span>名额释放后按排位自动递补</li>
+          <li><span>并发安全</span>条件更新保证不超卖、余量不为负</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="login-form-wrap">
+      <form id="login-form" class="login-form" autocomplete="off">
+        <h2>账号登录</h2>
+        <p class="login-tip">请使用学号 / 工号 / 管理员账号登录</p>
+
+        <label class="field">
+          <span class="field-label">账号</span>
+          <input id="login-username" type="text" placeholder="请输入账号" required />
+        </label>
+
+        <label class="field">
+          <span class="field-label">密码</span>
+          <input id="login-password" type="password" placeholder="请输入密码" required />
+        </label>
+
+        <label class="field" id="captcha-field" hidden>
+          <span class="field-label">验证码</span>
+          <div class="captcha-row">
+            <input id="login-captcha" type="text" placeholder="请计算结果" />
+            <button type="button" id="captcha-refresh" class="captcha-question" title="点击更换题目">点击刷新</button>
+          </div>
+        </label>
+
+        <div id="login-error" class="login-error" hidden></div>
+        <button type="submit" class="btn btn-primary btn-block" id="login-submit">登录</button>
+
+        <div class="demo-accounts">
+          <div class="demo-title">演示账号（点击直接填入，统一密码见 README）</div>
+          <div class="demo-list" id="demo-list"></div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 主应用 -->
+  <div id="app" class="layout" hidden>
+    <header class="topbar">
+      <button class="icon-btn menu-toggle" id="menu-toggle" aria-label="展开菜单">☰</button>
+      <div class="logo">
+        <span class="logo-mark">选</span>
+        <span class="logo-text">在线选课系统</span>
+      </div>
+      <div class="term-chip" id="term-chip">—</div>
+      <div class="topbar-right">
+        <button class="icon-btn bell" id="bell-btn" aria-label="通知中心">
+          <span>🔔</span>
+          <span class="badge-dot" id="unread-badge" hidden>0</span>
+        </button>
+        <div class="user-chip">
+          <span class="avatar" id="user-avatar">—</span>
+          <span class="user-meta">
+            <strong id="user-name">—</strong>
+            <em id="user-role">—</em>
+          </span>
+        </div>
+        <button class="btn btn-ghost" id="logout-btn">退出</button>
+      </div>
+    </header>
+
+    <div class="body">
+      <aside class="sidebar" id="sidebar">
+        <nav id="side-nav"></nav>
+        <div class="side-foot" id="side-foot"></div>
+      </aside>
+      <main class="content" id="content" tabindex="-1"></main>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

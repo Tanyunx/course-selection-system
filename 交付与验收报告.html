@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>选课系统 · 交付与验收报告</title>
+<style>
+  :root {
+    --ink: #1f2937;
+    --ink-2: #475467;
+    --muted: #667085;
+    --line: #e4e7ec;
+    --bg: #f7f8fa;
+    --card: #ffffff;
+    --brand: #2563eb;
+    --brand-soft: #eff4ff;
+    --ok: #067647;
+    --ok-soft: #ecfdf3;
+    --warn: #b54708;
+    --warn-soft: #fffaeb;
+    --danger: #b42318;
+    --danger-soft: #fef3f2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px 20px 64px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    font-size: 14px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+
+  header.hero {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 28px 30px;
+    margin-bottom: 20px;
+  }
+  header.hero h1 { margin: 0 0 6px; font-size: 24px; letter-spacing: -.2px; }
+  header.hero .sub { margin: 0 0 18px; color: var(--muted); font-size: 13.5px; }
+  .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px 24px; }
+  .meta div { font-size: 13px; color: var(--ink-2); }
+  .meta b { display: block; color: var(--muted); font-weight: 500; font-size: 12px; margin-bottom: 2px; }
+
+  section {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 24px 30px;
+    margin-bottom: 18px;
+  }
+  h2 {
+    font-size: 17px;
+    margin: 0 0 4px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  h2 .n {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px; height: 22px;
+    margin-right: 9px;
+    border-radius: 6px;
+    background: var(--brand-soft);
+    color: var(--brand);
+    font-size: 12px;
+    font-weight: 600;
+    vertical-align: 1px;
+  }
+  h3 { font-size: 14px; margin: 20px 0 8px; color: var(--ink); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code {
+    background: #f2f4f7;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 1px 5px;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 12.5px;
+    color: #344054;
+  }
+  pre {
+    background: #1d2939;
+    color: #e4e7ec;
+    border-radius: 10px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-size: 12.5px;
+    line-height: 1.65;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  }
+  pre code { background: none; border: 0; color: inherit; padding: 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  th, td { border: 1px solid var(--line); padding: 8px 11px; text-align: left; vertical-align: top; }
+  th { background: #f9fafb; font-weight: 600; color: var(--ink-2); font-size: 12.5px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tbody tr:nth-child(even) td { background: #fcfcfd; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 14px 0 6px; }
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    background: #fcfcfd;
+  }
+  .card .k { font-size: 12px; color: var(--muted); }
+  .card .v { font-size: 22px; font-weight: 650; letter-spacing: -.4px; margin-top: 2px; }
+  .card .v small { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 3px; }
+  .card.ok .v { color: var(--ok); }
+  .card.brand .v { color: var(--brand); }
+
+  .pill {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.danger { background: var(--danger-soft); color: var(--danger); }
+  .pill.brand { background: var(--brand-soft); color: var(--brand); }
+
+  .note {
+    border-left: 3px solid var(--brand);
+    background: var(--brand-soft);
+    border-radius: 0 8px 8px 0;
+    padding: 11px 15px;
+    margin: 14px 0;
+    font-size: 13px;
+    color: #1e40af;
+  }
+  .note.warn { border-color: #f79009; background: var(--warn-soft); color: #93370d; }
+
+  footer { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 26px; }
+
+  @media print {
+    body { background: #fff; padding: 0; font-size: 12px; }
+    section, header.hero { border: 0; padding: 0 0 14px; margin-bottom: 10px; break-inside: avoid; }
+    h2 { break-after: avoid; }
+    pre { background: #f2f4f7; color: #1d2939; border: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <h1>选课系统 · 交付与验收报告</h1>
+    <p class="sub">Web 应用与开发课程作业　|　按《选课系统系统设计文档（优化版 V3.0）》"必做技术栈"完整实现</p>
+    <div class="meta">
+      <div><b>工程目录</b><code>course-selection-system/</code></div>
+      <div><b>技术栈</b>HTML5 + CSS3 + 原生 ES Module / Node.js + Express / MySQL 8.0</div>
+      <div><b>数据库</b>18 张表，含唯一约束与索引</div>
+      <div><b>验证结论</b>三层测试共 79 项，全部通过</div>
+    </div>
+  </header>
+
+  <section>
+    <h2><span class="n">1</span>交付内容概览</h2>
+    <p>本工程把设计文档中的架构、数据模型、业务规则与界面设计完整落地为可运行系统，覆盖学生、教师、教务管理员、系统管理员四类角色，无需任何前端构建步骤，<code>npm install</code> 后即可启动。</p>
+
+    <div class="cards">
+      <div class="card brand"><div class="k">数据表</div><div class="v">18<small>张</small></div></div>
+      <div class="card"><div class="k">REST 接口分组</div><div class="v">8<small>组</small></div></div>
+      <div class="card"><div class="k">前端页面</div><div class="v">24<small>个</small></div></div>
+      <div class="card ok"><div class="k">测试通过率</div><div class="v">100<small>%</small></div></div>
+    </div>
+
+    <h3>目录结构</h3>
+    <pre><code>course-selection-system/
+├─ config/            集中配置（支持环境变量覆盖）
+├─ db/                schema.sql 建库建表 · seed.sql 种子数据
+├─ scripts/init-db.js 一键初始化（建表 + 导入 + 生成口令哈希）
+├─ server/
+│  ├─ app.js          Express 入口、安全响应头、指标采集、候补超时扫描
+│  ├─ db.js           连接池与事务封装
+│  ├─ middleware/     鉴权与角色校验、幂等、限速、学生/教师上下文
+│  ├─ services/       规则引擎、选课、候补、账号、通知与审计
+│  ├─ routes/         auth / courses / enrollments / waitlist / notices / teacher / admin / sys
+│  └─ store/          会话、幂等缓存、限速桶、运行指标
+├─ public/            原生 HTML + CSS + ES Module 前端
+├─ tests/             smoke.js 接口冒烟 · acceptance.js 端到端验收
+└─ .uicheck/          jsdom 前端集成验证（开发期工具，不参与运行）</code></pre>
+
+    <h3>启动方式</h3>
+    <pre><code>npm install          # 安装依赖
+npm run db:init      # 初始化数据库（建 18 张表并导入演示数据）
+npm start            # 启动服务，默认 http://127.0.0.1:3000</code></pre>
+    <div class="note">演示账号共 4 类角色（学生 / 教师 / 教务管理员 / 系统管理员），登录口令见 <code>README.md</code> 的「演示账号」一节；登录页也提供了一键填入的演示账号按钮。</div>
+  </section>
+
+  <section>
+    <h2><span class="n">2</span>功能实现清单</h2>
+    <table>
+      <thead>
+        <tr><th style="width:96px">角色</th><th>已实现功能</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="pill brand">学生</span></td>
+          <td>选课中心（关键字/类别/星期/校区筛选、仅看可选、热度与状态标签）、开课详情、选课、退课、换课、候补加入与取消、我的已选、课表周视图（支持单双周切换与打印导出）、通知中心、选课规则说明</td>
+        </tr>
+        <tr>
+          <td><span class="pill brand">教师</span></td>
+          <td>我的开课列表、成绩录入（平时/期末按权重计算总评与绩点）、选课学生名单、学生成绩与统计</td>
+        </tr>
+        <tr>
+          <td><span class="pill brand">教务管理员</span></td>
+          <td>数据概览（开课数、选课记录、容量利用率、候补人数、热门开课 TOP8、批次时间轴）、课程目录维护与先修关系配置、开课计划、排课时段编辑、名额管理（扩容与状态）、选课批次、学分规则与类别学分要求、公告发布</td>
+        </tr>
+        <tr>
+          <td><span class="pill brand">系统管理员</span></td>
+          <td>用户管理（新增/编辑/启停/重置口令/角色切换，含学生与教师档案联动）、审计日志（按操作类型与关键字检索）、运行监控（成功率、P95 响应、错误码分布、热点路径、在线人数）</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="n">3</span>核心业务规则实现要点</h2>
+    <table>
+      <thead>
+        <tr><th style="width:150px">规则</th><th>实现方式</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>防超卖</td><td>条件更新 <code>UPDATE t_course_offering SET enrolled = enrolled + 1 WHERE id = ? AND enrolled &lt; capacity AND status &lt;&gt; 0</code>，影响行数为 0 即判定已满</td></tr>
+        <tr><td>时间冲突检测</td><td>纯 SQL 自连接：星期相同 + 节次区间相交 + 单双周不互斥（全周与任一周次视为冲突）</td></tr>
+        <tr><td>选课校验顺序</td><td>鉴权 → 幂等 → 批次(2005) → 重复(2006/2007) → 占名额(2001) → 冲突(2002) → 学分(2003) → 先修(2004) → 落库；任一步失败整体回滚，名额自动归还</td></tr>
+        <tr><td>换课</td><td>「先占后放」单一事务，目标课程无余量直接返回 2009 且原课程不受影响</td></tr>
+        <tr><td>候补递补</td><td>退课后按队列触发递补，递补时二次校验冲突与学分；失败则标记失效并顺延给下一位；超时未确认自动过期</td></tr>
+        <tr><td>幂等</td><td><code>requestId</code> 缓存已处理响应（默认 5 分钟），重复提交返回首次结果</td></tr>
+        <tr><td>防刷限速</td><td>60 秒内 10 次写请求触发 9001，20 次要求验证码；读接口不受影响</td></tr>
+        <tr><td>权限控制</td><td>四类角色 RBAC，越权访问返回 1003 并写入审计日志</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="n">4</span>验证结果</h2>
+    <p>分三层验证：接口冒烟测试、端到端验收测试、前端集成验证。</p>
+
+    <div class="cards">
+      <div class="card ok"><div class="k">接口冒烟</div><div class="v">19<small>/19</small></div></div>
+      <div class="card ok"><div class="k">端到端验收</div><div class="v">15<small>/15</small></div></div>
+      <div class="card ok"><div class="k">前端集成</div><div class="v">53<small>/53</small></div></div>
+      <div class="card ok"><div class="k">单文件版引擎</div><div class="v">74<small>/74</small></div></div>
+      <div class="card ok"><div class="k">单文件版端到端</div><div class="v">51<small>/51</small></div></div>
+    </div>
+
+    <h3>4.1 接口冒烟测试（<code>tests/smoke.js</code>）</h3>
+    <p>覆盖健康检查、未登录拦截 1002、四类角色登录与身份获取、当前学期、课程列表与筛选、我的已选、我的课表、我的候补、通知未读数、教师开课、教务概览、开课计划、选课批次、用户管理、运行监控、审计日志，以及越权访问返回 1003。结果 <span class="pill ok">19 项全部通过</span>。</p>
+
+    <h3>4.2 端到端验收测试（<code>tests/acceptance.js</code>，对应设计文档表 28）</h3>
+    <table>
+      <thead>
+        <tr><th style="width:74px">用例</th><th>场景</th><th>关键结果</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>TC-01</td><td>并发抢课不超卖</td><td>100 个并发请求抢 5 个名额：成功 5 次、已满 95 次，<code>enrolled=5</code>，实际记录 5 条</td></tr>
+        <tr><td>TC-02</td><td>重复选同一开课</td><td>返回 2006，记录数仍为 1</td></tr>
+        <tr><td>TC-03</td><td>同一 requestId 幂等</td><td>两次均返回 code=0，记录数 1</td></tr>
+        <tr><td>TC-04</td><td>全周时段冲突</td><td>返回 2002，并提示冲突课程名</td></tr>
+        <tr><td>TC-05</td><td>单双周不互斥</td><td>节次相交但一单一双，两门均选课成功</td></tr>
+        <tr><td>TC-06</td><td>多时段任一时段冲突</td><td>返回 2002</td></tr>
+        <tr><td>TC-07</td><td>超出学分上限</td><td>返回 2003，且名额未被占用</td></tr>
+        <tr><td>TC-08</td><td>先修课程未满足</td><td>返回 2004，提示缺失课程名</td></tr>
+        <tr><td>TC-09</td><td>不在选课批次窗口内</td><td>返回 2005</td></tr>
+        <tr><td>TC-10</td><td>候补自动递补</td><td>满员→候补→退课→自动递补，候补状态置为已递补，产生通知与递补轨迹</td></tr>
+        <tr><td>TC-11</td><td>递补二次校验失败</td><td>递补对象此时已冲突 → 候补置为已失效并顺延，产生失败通知</td></tr>
+        <tr><td>TC-12</td><td>换课目标已满</td><td>返回 2009，原课程名额与记录均不受影响</td></tr>
+        <tr><td>TC-13</td><td>退课截止后发起退课</td><td>返回 2008，名额未释放</td></tr>
+        <tr><td>TC-14</td><td>越权访问教务接口</td><td>返回 1003，审计日志新增 1 条</td></tr>
+        <tr><td>TC-15</td><td>防刷限速</td><td>15 次写请求触发 9001 共 6 次，其他用户读接口不受影响</td></tr>
+      </tbody>
+    </table>
+    <p>结果 <span class="pill ok">15 条全部通过</span>，测试数据使用 <code>ZZTEST</code> / <code>ZZC</code> / <code>ZZTEACH</code> 前缀，执行后自动清理。</p>
+
+    <h3>4.3 前端集成验证（<code>.uicheck/ui-check.js</code>）</h3>
+    <p>用 jsdom 加载真实页面并把 <code>fetch</code> 指向真实后端，真正执行前端模块，验证登录、按角色生成菜单、逐页渲染与关键交互。结果 <span class="pill ok">53 项全部通过</span>，未捕获异常与控制台错误均为 0，典型条目包括：</p>
+    <ul>
+      <li>四类角色登录成功，顶栏身份信息正确（如「学生 · 2024001 · 2024 级」「教师 · T1001」）</li>
+      <li>菜单按角色生成：学生 6 项、教师 3 项、教务 8 项、系统管理员 4 项，路径与权限矩阵一致</li>
+      <li>四类角色共 21 个页面逐页渲染，无报错、无错误提示区</li>
+      <li>选课中心渲染 10 张课程卡片，状态标签覆盖「可选 / 已选 / 时间冲突 / 候补中」等，热度进度条正常</li>
+      <li>开课详情弹窗页脚按钮、我的课表周视图单元格、退课二次确认弹窗（确认与取消行为）均正常</li>
+      <li>验证码链路：登录连续失败 5 次后验证码区自动出现且题目加载成功，正确作答后登录成功；CSS 保留 <code>[hidden]</code> 兜底规则的静态检查通过</li>
+      <li>节次时间与学校《课时表》一致：课表默认展示全天 13 节（上午 1~5、下午 6~10、晚上 11~13），含「时段 / 节次时间」，支持「只看有课节次」压缩显示；选课规则页展示完整课时表，抽查第 1/6/11 节起止时间正确</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="n">5</span>本轮修复记录</h2>
+    <p>前端集成验证与数据一致性核查共发现并修复 7 个缺陷。</p>
+    <table>
+      <thead>
+        <tr><th style="width:120px">位置</th><th style="width:86px">级别</th><th>问题与修复</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>选课规则引擎<br /><code>ruleService.js</code></td>
+          <td><span class="pill danger">严重</span></td>
+          <td><b>事务内嵌套申请连接导致连接池死锁。</b>事务中调用的规则函数仍从连接池取连接，池上限被占满后事务内再申请连接会永久等待，并与其他请求形成环形等待，验收测试挂起 4 分钟。修复：引入统一的 <code>runner(conn)</code> 执行器，全部规则函数支持传入事务连接。修复后验收测试耗时降至 8 秒。</td>
+        </tr>
+        <tr>
+          <td>演示数据<br /><code>db/seed.sql</code></td>
+          <td><span class="pill warn">中</span></td>
+          <td><b>种子数据存在真实排课冲突。</b>学生 2024001 的数据结构与高等数学都被排在周一 1-2 节，导致学生课表页出现「检测到课表内存在时间冲突」提示。修复：将该开课的首次时段调整为周二 1-2 节（教师与教室该时段均空闲），全量扫描后冲突归零，同时保留用于演示冲突状态标签的课程。</td>
+        </tr>
+        <tr>
+          <td>教务端课程目录<br /><code>views/admin.js</code></td>
+          <td><span class="pill danger">严重</span></td>
+          <td><b>访问了页面中不存在的元素。</b>渲染函数中残留一行操作「新增课程」弹窗元素的代码，该元素在页面骨架中并不存在，导致整个课程目录页报错打不开。修复：移除该行及随之失效的变量。</td>
+        </tr>
+        <tr>
+          <td>前端框架<br /><code>app.js</code> · <code>ui.js</code></td>
+          <td><span class="pill warn">中</span></td>
+          <td><b>退出登录后残留路由触发空引用；弹窗关闭依赖事件冒泡。</b>退出登录后残留的地址变化会让菜单渲染读取到空身份对象而抛异常（已加空值保护）；弹窗关闭按钮原依赖事件委托，改为直接绑定以提升健壮性。</td>
+        </tr>
+        <tr>
+          <td>登录页验证码<br /><code>app.js</code></td>
+          <td><span class="pill danger">严重</span></td>
+          <td><b>验证码题目永远无法显示。</b>脚本引用了不存在的元素 id（<code>#captcha-question</code>，实际按钮 id 为 <code>captcha-refresh</code>），加载题目时抛出未捕获异常。修复：统一引用真实 id 并加元素存在性保护；登录页初始化时预取验证码，需要作答时题目已就绪。</td>
+        </tr>
+        <tr>
+          <td>全局样式<br /><code>app.css</code> · <code>index.html</code></td>
+          <td><span class="pill danger">严重</span></td>
+          <td><b>hidden 属性被类选择器覆盖而失效。</b>登录页、应用框架、验证码输入区三类容器都设置了 display 的类规则，优先级高于浏览器对 <code>hidden</code> 属性的默认样式，导致登录页与应用框架同时渲染、验证码区在未触发时也一直可见。修复：新增全局 <code>[hidden] { display: none !important; }</code> 兜底规则，并经真实浏览器（无头 Edge）截图复核。</td>
+        </tr>
+        <tr>
+          <td>节次时间表<br /><code>ui.js</code> · <code>utils/period.js</code></td>
+          <td><span class="pill warn">中</span></td>
+          <td><b>节次时间与学校《课时表》不符。</b>原实现采用 8 节 45 分钟制（08:00-08:45 起、19:00 后还有 9~12 节），与学校统一的 13 节 40 分钟制（上午 1~5 节、下午 6~10 节、晚上 11~13 节，大节划分一 1-2 / 二 3-5 / 三 6-7 / 四 8-10 / 五 11-13）不一致。修复：前后端统一更换为课时表标准时间（新增 <code>server/utils/period.js</code> 与前端常量保持同源）；课表增加「时段」列并标注每节起止时间；选课规则页新增完整课时表；排课编辑器节次上限改为 13 并在选项中显示时间；教师端与教务端排课校验统一走 <code>assertValidSchedules</code>（教务端此前缺少节次合法性校验，一并补上）。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="n">6</span>与设计文档的对应关系</h2>
+    <table>
+      <thead>
+        <tr><th style="width:230px">设计文档章节</th><th>实现落点</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>2.2 技术选型（必做档）</td><td>HTML5 + CSS3 + 原生 JS / Node.js + Express / MySQL 8.0</td></tr>
+        <tr><td>2.4 接口设计与表 4</td><td><code>server/routes/*</code>，统一返回体与分页结构</td></tr>
+        <tr><td>2.5 错误码表 5</td><td><code>server/utils/errors.js</code>，前端 <code>api.js</code> 映射为提示文案</td></tr>
+        <tr><td>第 3 章 界面设计</td><td><code>public/</code>，顶栏 + 左侧栏 + 主体区布局，响应式与无障碍要点</td></tr>
+        <tr><td>4.2 / 4.3 / 4.4 / 4.6 / 4.7 规则</td><td><code>server/services/ruleService.js</code></td></tr>
+        <tr><td>5.2 ~ 5.6 数据库设计</td><td><code>db/schema.sql</code>（18 张表、约束、索引）</td></tr>
+        <tr><td>6.1 / 6.2 / 6.3 / 6.5 核心流程</td><td><code>enrollmentService.js</code>、<code>waitlistService.js</code></td></tr>
+        <tr><td>表 26 角色权限矩阵</td><td><code>server/middleware/auth.js</code> 的 <code>requireRole</code></td></tr>
+        <tr><td>表 28 关键验收用例</td><td><code>tests/acceptance.js</code></td></tr>
+      </tbody>
+    </table>
+    <div class="note">设计文档中出现的「周一 1-2 节」等时段描述仅属附录 A 界面原型与表 28 验收用例的通用示例，不与演示数据绑定，因此无需随实现调整。</div>
+  </section>
+
+  <footer>选课系统 Web 应用 · 交付与验收报告　|　完整启动说明与接口清单见工程根目录 <code>README.md</code></footer>
+</div>
+</body>
+</html>

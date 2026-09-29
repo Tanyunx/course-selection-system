@@ -1,0 +1,13 @@
+node_modules/
+.env
+.jscheck/
+npm-debug.log*
+*.log
+.DS_Store
+
+# 开发期前端验证工具的依赖与临时产物（源码保留）
+.uicheck/node_modules/
+.uicheck/edgedata/
+.uicheck/esm/
+.uicheck/inline-bundle.js
+.uicheck/preview-*.html
