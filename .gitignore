@@ -1,5 +1,7 @@
 node_modules/
 .env
+.env.bak.*
+.db-initialized
 .jscheck/
 npm-debug.log*
 *.log
@@ -11,3 +13,4 @@ npm-debug.log*
 .uicheck/esm/
 .uicheck/inline-bundle.js
 .uicheck/preview-*.html
+.uicheck/guide-check*.png

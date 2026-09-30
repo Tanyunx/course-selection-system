@@ -1,0 +1,5 @@
+# 换行符约束：避免在 Windows 上克隆后把 shell 脚本变成 CRLF
+# （CRLF 的 .sh 在 Linux 上会报 `\r: command not found`，且极难排查）
+*.sh  text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
