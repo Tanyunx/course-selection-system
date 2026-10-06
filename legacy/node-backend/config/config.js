@@ -47,6 +47,15 @@ module.exports = {
     host: env('HOST', '127.0.0.1'),
   },
 
+  /**
+   * 跨域白名单（前后端分离架构，见 README 第 1 节）。
+   * 留空或填 * 表示放行任意来源，适合开发与公开演示；
+   * 生产环境建议填前端实际地址，例如：https://course.example.com,http://1.2.3.4
+   */
+  cors: {
+    origins: env('CORS_ORIGINS', '*'),
+  },
+
   db: {
     host: env('DB_HOST', '127.0.0.1'),
     port: envInt('DB_PORT', 3306),

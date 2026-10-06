@@ -7,6 +7,12 @@ npm-debug.log*
 *.log
 .DS_Store
 
+# Maven 构建产物
+backend/target/
+
+# 数据库与服务器备份
+*.dump
+
 # 开发期前端验证工具的依赖与临时产物（源码保留）
 .uicheck/node_modules/
 .uicheck/edgedata/
@@ -14,3 +20,4 @@ npm-debug.log*
 .uicheck/inline-bundle.js
 .uicheck/preview-*.html
 .uicheck/guide-check*.png
+.uicheck/shot-*.png

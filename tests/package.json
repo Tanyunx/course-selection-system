@@ -1,0 +1,17 @@
+{
+  "name": "course-selection-tests",
+  "private": true,
+  "version": "3.0.0",
+  "description": "选课系统黑盒回归测试（冒烟 / 验收 / 并发），只依赖 Node 内置 fetch 与 pg",
+  "type": "commonjs",
+  "scripts": {
+    "smoke": "node smoke.js",
+    "acceptance": "node acceptance.js",
+    "concurrency": "node concurrency.js",
+    "all": "node smoke.js && node acceptance.js && node concurrency.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "pg": "^8.13.1"
+  }
+}

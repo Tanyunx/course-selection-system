@@ -7,22 +7,9 @@
  * 测试会在数据库中创建带 ZZTEST 前缀的临时数据，执行结束后自动清理。
  */
 
-const { Client } = require('pg');
-const bcrypt = require('bcryptjs');
-
-/**
- * 直连数据库用的连接参数。
- *
- * 迁移到 PostgreSQL 后，测试不再 require Node 后端的 config/config.js，
- * 改为直接读环境变量（与 backend/.env、application.yml 中的默认值一致）。
- */
-const DB = {
-  host: process.env.DB_HOST || '127.0.0.1',
-  port: Number(process.env.DB_PORT || 55432),
-  user: process.env.DB_USER || 'course_app',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'course_selection',
-};
+const mysql = require('mysql2/promise');
+const config = require('../config/config');
+const pwd = require('../src/utils/password');
 
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:3000';
 const DEMO_PWD = '123456';
@@ -39,38 +26,9 @@ function assertCase(id, name, cond, detail) {
   record(id, name, cond, detail);
 }
 
-/**
- * 执行 SQL 并返回结果行。
- *
- * MySQL → PostgreSQL 的两处语法差异全部收在这一个函数里，调用点写法保持不变：
- *   1. 占位符：mysql2 用 ?，pg 用 $1/$2…，这里按出现顺序自动编号；
- *   2. IN (?) 传数组：mysql2 会自动展开成列表，pg 不会，这里展开成 ($1,$2,…)。
- */
 async function sql(q, p = []) {
-  const params = [];
-  let idx = 0;
-  const text = q.replace(/\?/g, () => {
-    if (idx >= p.length) {
-      throw new Error('SQL 占位符数量多于参数数量，请检查用例：' + q);
-    }
-    const v = p[idx++];
-    if (Array.isArray(v)) {
-      if (v.length === 0) {
-        params.push(null);
-        return 'NULL';
-      }
-      return v
-        .map((item) => {
-          params.push(item);
-          return '$' + params.length;
-        })
-        .join(',');
-    }
-    params.push(v);
-    return '$' + params.length;
-  });
-  const res = await conn.query(text, params);
-  return res.rows;
+  const [rows] = await conn.query(q, p);
+  return rows;
 }
 
 async function apiCall(method, path, { token, body } = {}) {
@@ -141,7 +99,7 @@ async function setup() {
   FIX.batchId = batch.id;
 
   // 统一的密码哈希（bcrypt 计算一次，复用给全部临时账号）
-  FIX.hash = bcrypt.hashSync(DEMO_PWD, 10);
+  FIX.hash = pwd.hash(DEMO_PWD);
 
   // 用于 TC-01 的 100 名学生
   FIX.students = [];
@@ -206,12 +164,10 @@ async function createOffering(courseCode, capacity, schedules) {
   if (!teacherId) throw new Error('测试教师池已用尽，请扩大 FIX.teacherPool');
   const r = await sql(
     `INSERT INTO t_course_offering (course_id, term_id, teacher_id, capacity, enrolled, status, campus)
-     VALUES (?, ?, ?, ?, 0, 1, 'ZZ测试校区')
-     RETURNING id`,
+     VALUES (?, ?, ?, ?, 0, 1, 'ZZ测试校区')`,
     [courseId, FIX.termId, teacherId, capacity]
   );
-  // PostgreSQL 没有 MySQL 的 insertId，改为 INSERT ... RETURNING id
-  const offeringId = r[0].id;
+  const offeringId = r.insertId;
   for (const s of schedules) {
     await sql(
       `INSERT INTO t_course_schedule (offering_id, weekday, start_period, end_period, parity, campus, building, room)
@@ -381,7 +337,7 @@ async function tc09() {
   const username = FIX.students[5].username;
   const token = await login(username);
   const all = await sql(`SELECT id, start_time, end_time FROM t_enroll_batch WHERE term_id = ?`, [FIX.termId]);
-  await sql(`UPDATE t_enroll_batch SET start_time = NOW() + INTERVAL '7 days' WHERE term_id = ?`, [FIX.termId]);
+  await sql(`UPDATE t_enroll_batch SET start_time = DATE_ADD(NOW(), INTERVAL 7 DAY) WHERE term_id = ?`, [FIX.termId]);
 
   const offering = await createOffering('ZZC003', 40, [{ weekday: 5, startPeriod: 3, endPeriod: 4, parity: 0 }]);
   const res = await apiCall('POST', '/api/enrollments', { token, body: { offeringId: offering, requestId: rid() } });
@@ -511,7 +467,7 @@ async function tc13() {
   const r1 = await apiCall('POST', '/api/enrollments', { token, body: { offeringId: offering, requestId: rid() } });
 
   const [batch] = await sql(`SELECT id, end_time FROM t_enroll_batch WHERE term_id = ? AND type = 2 LIMIT 1`, [FIX.termId]);
-  await sql(`UPDATE t_enroll_batch SET end_time = NOW() - INTERVAL '30 days' WHERE id = ?`, [batch.id]);
+  await sql(`UPDATE t_enroll_batch SET end_time = DATE_SUB(NOW(), INTERVAL 30 DAY) WHERE id = ?`, [batch.id]);
 
   const [before] = await sql(`SELECT enrolled FROM t_course_offering WHERE id = ?`, [offering]);
   const res = await apiCall('DELETE', `/api/enrollments/${offering}`, { token, body: { requestId: rid() } });
@@ -580,8 +536,14 @@ async function main() {
     process.exit(1);
   }
 
-  conn = new Client(DB);
-  await conn.connect();
+  conn = await mysql.createConnection({
+    host: config.db.host,
+    port: config.db.port,
+    user: config.db.user,
+    password: config.db.password,
+    database: config.db.database,
+    multipleStatements: true,
+  });
 
   try {
     await setup();

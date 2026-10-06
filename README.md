@@ -1,8 +1,14 @@
 # 在线选课系统（Web 应用与开发 课程作业）
 
-基于 B/S 三层架构的在线选课系统，实现文档《选课系统系统设计文档（优化版 V3.0）》中的全部必做功能：
+基于 **B/S 三层架构、前后端分离** 的在线选课系统，实现设计文档《选课系统系统设计文档（优化版 V3.0）》中的全部必做功能：
 四类角色的权限体系、课程查询、选课 / 退课 / 换课、时间冲突检测、容量与防超卖、候补与自动递补、
 学分与类别校验、先修校验、选课批次错峰、通知中心、审计日志与运行监控。
+
+**技术路线**（按作业要求选定）：Java Web（Spring Boot 3 + Spring MVC）+ PostgreSQL + Linux 学生机 +
+腾讯云轻量应用服务器 + 域名与 HTTPS 证书 + 源码托管 GitHub。
+
+> 多人并发是本次作业的核心考点，所有"判断 + 自增"都放在数据库里用**条件更新 + 事务**完成，
+> 不依赖任何应用层锁，也不依赖 Redis。实测结论见[第 7 章](#7-测试)。
 
 ## 0. 在线演示与界面预览
 
@@ -11,8 +17,10 @@
 | **在线演示**（免安装，点开即用） | <https://tanyunx.github.io/course-selection-system/> |
 | 代码仓库 | <https://github.com/Tanyunx/course-selection-system> |
 
-> 在线演示为单文件版：业务引擎与数据全部内嵌在页面里，保存在浏览器内存中，刷新即恢复初始状态。
-> 完整的数据库版（Express + MySQL）请按[第 3 章](#3-快速开始)在本地部署，两者界面与业务规则完全一致。
+> 在线演示是"阶段一"的单文件 mock 版：业务引擎与数据全部内嵌在页面里，保存在浏览器内存中，刷新即恢复初始状态。
+> 这与作业要求中"开始时数据可以先用 mock、保存在本地 JSON"相对应；
+> "阶段二"的完整版（Java 后端 + PostgreSQL 持久化 + 多人并发一致性）请按[第 3 章](#3-快速开始)在本地或服务器部署，
+> 两者界面与业务规则完全一致。
 
 **登录页**（右侧演示账号可一键填入）
 
@@ -24,63 +32,93 @@
 
 ## 1. 技术栈
 
-| 层次 | 选型 |
-| --- | --- |
-| 表现层 | HTML5 + CSS3 + 原生 JavaScript（ES Module，无构建步骤） |
-| 业务逻辑层 | Node.js 18+ / Express 4 |
-| 数据访问层 | MySQL 8.0（mysql2 连接池 + 事务）；密码哈希用 bcrypt |
-| 接口风格 | REST + JSON，统一返回体 `{ code, message, data }` |
-| 部署 | 应用服务托管静态资源，单机即可运行 |
+| 层次 | 选型 | 为什么这么选 |
+| --- | --- | --- |
+| 表现层 | HTML5 + CSS3 + 原生 JavaScript（ES Module，**无构建步骤**） | 课程重点是架构与并发，前端不引入打包器可让评审直接看源码 |
+| 控制层 | **Spring Boot 3.3.5 + Spring MVC**（`@RestController`） | Java Web 领域当前的主流落地方式，内嵌 Tomcat，无需外置容器 |
+| 业务逻辑层 | Spring `@Service` + `TransactionTemplate` 编程式事务 | 选课流程需要精确控制事务边界（"先占后删""失败整体回滚"） |
+| 数据访问层 | **Spring JDBC（JdbcTemplate）** + HikariCP 连接池 | 见下方说明 |
+| 数据库 | **PostgreSQL 17**（`timestamp without time zone`、行级锁） | 作业推荐；行锁语义清晰，`ON CONFLICT` / `RETURNING` 让并发写法更短 |
+| 鉴权 | 自包含 HMAC-SHA256 令牌（`Authorization: Bearer`）+ 服务端会话表 | 前后端分离、跨域场景下比 Cookie 更简单，也避免 CSRF |
+| 口令存储 | BCrypt（`bcryptjs` 生成、Spring 侧 `BCryptPasswordEncoder` 校验） | 数据库只存哈希，源码与种子脚本都不含明文口令 |
+| 接口风格 | REST + JSON，统一返回体 `{ code, message, data }` | 与设计文档表 4 / 表 5 完全一致 |
+| 构建 | Maven 3.9 + JDK 21（LTS） | Spring Boot 3.x 要求 JDK 17+ |
+| 部署 | Nginx 托管前端静态资源 + `/api` 反向代理到 Spring Boot（systemd 常驻） | 前后端真正独立部署，前端可单独换 CDN |
+| 运行环境 | Linux（Ubuntu 24.04/26.04 LTS） | 作业要求"学生机用 Linux" |
+
+**为什么用 JdbcTemplate 而不是 MyBatis / JPA**
+
+本项目的难点不在 CRUD，而在几条必须"精确控制 SQL 与事务"的并发语句（例如
+`UPDATE t_course_offering SET enrolled = enrolled + 1 WHERE id = ? AND enrolled < capacity`）。
+JdbcTemplate 让这些语句**逐字可见、可控**，评审时能直接在代码里看到"依赖数据库行锁防超卖"这件事本身；
+同时 SQL 与"阶段一"Node 版保持一致，便于对照阅读。代价是需要手写行到对象的映射，
+本书面量工作由 `db/Db.java` 统一封装（见[第 5 章](#5-核心规则实现要点)）。
 
 ## 2. 目录结构
 
 ```
 course-selection-system/
-├─ config/config.js            # 集中配置（数据库、令牌、限速阈值、业务参数）
-├─ db/
-│  ├─ schema.sql               # 建库建表：18 张表 + 唯一约束 + 索引 + 外键
-│  └─ seed.sql                 # 种子数据（学期、用户、课程、开课、排课、批次、规则）
-├─ scripts/init-db.js          # 一键初始化数据库
-├─ server/
-│  ├─ app.js                   # 应用入口（路由挂载、指标采集、启动自检）
-│  ├─ db.js                    # 连接池与事务封装
-│  ├─ middleware/
-│  │  ├─ auth.js               # 令牌鉴权 + RBAC 角色校验
-│  │  ├─ guards.js             # 写操作幂等 + 防脚本限速
-│  │  └─ student.js            # 学生/教师上下文加载
-│  ├─ services/
-│  │  ├─ ruleService.js        # 规则引擎：批次、冲突检测、学分、先修、退课截止
-│  │  ├─ courseService.js      # 课程查询与选课状态标注
-│  │  ├─ enrollmentService.js  # 选课 / 退课 / 换课核心流程
-│  │  ├─ waitlistService.js    # 候补与自动递补
-│  │  ├─ accountService.js     # 账号与身份
-│  │  ├─ notice.js / audit.js  # 通知与审计
-│  ├─ routes/                  # auth / courses / enrollments / waitlist / notices / teacher / admin / sys
-│  └─ store/                   # 会话、幂等缓存、限速桶、运行指标
-├─ public/                     # 前端（原生 JS 多页单页混合式，按角色生成菜单）
+├─ backend/                          # 【后端】Java Web（Spring Boot 3），独立部署单元
+│  ├─ pom.xml                        # Maven 依赖与构建（finalName = course-selection-backend）
+│  ├─ .env.example                   # 环境变量模板（真实口令只放 .env，已被 .gitignore 排除）
+│  └─ src/main/
+│     ├─ java/com/campus/course/
+│     │  ├─ CourseSelectionApplication.java   # 启动类
+│     │  ├─ common/                  # ApiResponse / Api / ErrorCode / BizException / 全局异常处理
+│     │  ├─ config/                  # AppProperties（配置绑定）/ JacksonConfig（时间格式）/ WebConfig（CORS + 拦截器）
+│     │  ├─ db/Db.java               # 数据访问层统一入口：query / update / insertReturningId / withTransaction
+│     │  ├─ security/                # TokenService（HMAC 令牌）/ SessionStore / AuthInterceptor / @RequireRole
+│     │  ├─ service/                 # 业务层：选课规则、课程、选课、候补、通知、审计、幂等与限速守卫
+│     │  ├─ store/                   # 会话、幂等缓存、限速桶、运行指标
+│     │  ├─ util/Period.java         # 全校统一课时表（13 节）与时段合法性校验
+│     │  ├─ init/                    # DbInitializer（建表导数据）/ ScheduledTasks（候补超时回收、缓存清理）
+│     │  └─ web/                     # 9 个 Controller：auth / courses / enrollments / waitlist / notices / teacher / admin / sys / health
+│     └─ resources/
+│        ├─ application.yml          # 配置（全部支持环境变量覆盖）
+│        └─ db/
+│           ├─ schema-pg.sql         # 【PostgreSQL】建表：18 张表 + 唯一约束 + 索引 + 外键 + updated_at 触发器
+│           └─ seed-pg.sql           # 种子数据（学期、用户、课程、开课、排课、批次、规则）
+│
+├─ frontend/                         # 【前端】原生 HTML + CSS + ES Module，由 Nginx 直接托管
 │  ├─ index.html
 │  ├─ css/app.css
-│  └─ js/{api,ui,app,scheduleEditor}.js + js/views/{student,teacher,admin,sys}.js
-├─ tests/
-│  ├─ smoke.js                 # 接口冒烟测试（19 项）
-│  └─ acceptance.js            # 端到端验收测试（对应文档表 28 的 TC-01 ~ TC-15）
-├─ web-build/                  # 单文件网页版构建工具（免安装演示版的全部源码）
-│  ├─ export-data.js           # 从本机 MySQL 导出 18 张表种子数据 → mock/data.js
-│  ├─ build.js                 # 把前端 + 内嵌引擎打包为单个 .html，并同步产出 docs/index.html
-│  ├─ test-engine.js           # 单文件版引擎回归测试（74 项）
-│  └─ mock/                    # 内嵌业务引擎：core（基础设施）/ rules（规则）/ services / routes
-├─ docs/index.html           # 【部署产物】纯静态站点入口，可直接上传到任意静态托管
-├─ 选课系统-单文件版.html        # 【交付物】免安装单文件网页，双击即用
-├─ 云服务器部署指南.md          # 【部署文档】静态托管 / 云服务器两条路线的完整步骤
-├─ screenshots/                # 界面截图（README 展示：登录页 / 课表 / 选课规则）
-├─ .env.example                # 配置模板（真实环境变量 > .env > 代码默认值）
-└─ .uicheck/                   # 开发期前端集成验证（jsdom），不参与线上运行
-   ├─ ui-check.js              # 数据库版前端验证：四角色登录 + 菜单 + 逐页渲染（53 项）
-   ├─ static-check.js          # 单文件版验证：加载构建产物真实执行（51 项）
-   ├─ diag-conflict.js         # 诊断：单个学生的课表冲突排查
-   ├─ diag-all-conflict.js     # 诊断：全量学生课表冲突扫描
-   ├─ diag-layout.js           # 诊断：排课全景（课程/教师/时段/教室/选课学生）
-   └─ perm-probe.js            # 探针：验证部署指南中的 MySQL 专用账号授权是否够用
+│  ├─ js/{api,ui,app,scheduleEditor}.js
+│  ├─ js/views/{student,teacher,admin,sys}.js   # 四端界面
+│  └─ mock/                          # 阶段一：本地 JSON mock 数据层（浏览器内跑通全流程，不依赖后端）
+│
+├─ tests/                            # 黑盒回归测试（Node 运行，只走 HTTP / 只读校验数据库）
+│  ├─ package.json                   # 依赖 pg + bcryptjs（npm install 后即可运行）
+│  ├─ smoke.js                       # 接口冒烟测试：19 项
+│  ├─ acceptance.js                  # 端到端验收测试：15 项（对应文档表 28 的 TC-01 ~ TC-15）
+│  └─ concurrency.js                 # 并发 / 幂等 / 候补递补实测：17 项
+│
+├─ tools/                            # 开发与运维辅助脚本
+│  ├─ pg-setup.sh                    # 本机建库：生成随机口令写 .env → 建角色与库 → 导入 schema
+│  ├─ mysql2pg.py                    # MySQL 种子脚本 → PostgreSQL 种子脚本转换器（记录全部迁移规则）
+│  ├─ run-backend.sh                 # 本地启动后端（加载 .env、显式下发端口）
+│  ├─ serve-frontend.js              # 本地前端服务器：托管 frontend/ 并把 /api 转发到后端（只依赖 Node 内置模块）
+│  ├─ maven-settings.xml             # Maven 国内镜像配置（阿里云 public）
+│  └─ build.js / export-data.js / test-engine.js / diag-engine.js   # 阶段一单文件版的构建与自测工具
+│
+├─ legacy/node-backend/              # 【归档】阶段一的 Node.js + Express + MySQL 实现，保留供对照与迁移溯源
+│
+├─ docs/
+│  ├─ index.html                     # 【阶段一产物】纯静态站点入口（GitHub Pages 即用它）
+│  └─ 课程知识与设计思考.md            # 【报告素材】用到的课程知识、技术选型与踩坑记录
+│
+├─ deploy.sh                         # 云服务器一键部署（Ubuntu + JDK + PostgreSQL + Nginx + HTTPS）
+├─ 云服务器部署指南.md                # 部署路线与逐步操作
+├─ 交付与验收报告.html                # 交付清单与验收结论
+├─ 选课系统-单文件版.html             # 【阶段一交付物】免安装单文件网页，双击即用
+├─ 启动选课系统.bat                   # Windows 一键启动本地后端（Java）
+│
+├─ .uicheck/                         # 开发期前端集成验证（jsdom），不参与线上运行
+│  ├─ ui-check.js                    # 加载真实页面并对接真实后端：四角色登录 + 逐页渲染 + 交互（53 项）
+│  ├─ static-check.js                # 阶段一单文件版验证：加载构建产物真实执行（51 项）
+│  ├─ diag-*.js                      # 课表冲突 / 排课全景等诊断脚本
+│  └─ node_modules/                  # jsdom（已被 .gitignore 排除）
+│
+└─ screenshots/                      # 界面截图
 ```
 
 ## 3. 快速开始
@@ -89,59 +127,121 @@ course-selection-system/
 
 工程根目录的 **`选课系统-单文件版.html`** 是一个完全自包含的网页：
 
-- **无需 Node、无需 MySQL、无需任何安装**，双击用浏览器打开即可完整演示
+- **无需 JDK、无需 PostgreSQL、无需任何安装**，双击用浏览器打开即可完整演示
 - 内嵌了与数据库版同源的全部演示数据（18 张表）与业务规则引擎
-  （批次准入、时间冲突、单双周、学分上限、先修校验、候补自动递补、幂等、限速均已实现）
+  （批次准入、时间冲突、单双节次、单双周、学分上限、先修校验、候补自动递补、幂等、限速均已实现）
 - 四类角色登录、选课 / 退课 / 换课 / 候补 / 课表 / 通知 / 教务管理 / 系统监控全部可用
 - 数据保存在浏览器内存中，刷新页面即恢复初始状态；页面底部有「重置演示数据」按钮
-- 演示账号与口令直接显示在登录页
 
-适合课堂演示、发给同学老师、拷到 U 盘随时打开。若修改了种子数据或业务逻辑，重新构建：
+适合课堂演示、发给同学老师、拷到 U 盘随时打开。若修改了种子数据或业务规则，重新构建：
 
 ```bash
-node web-build/export-data.js   # 可选：从数据库重新导出演示数据
-node web-build/build.js         # 重新打包单文件
-node web-build/test-engine.js   # 引擎回归测试（74 项）
+node tools/export-data.js    # 可选：从数据库重新导出演示数据
+node tools/build.js          # 重新打包单文件（同时产出 docs/index.html）
+node tools/test-engine.js    # 引擎回归测试（74 项）
 ```
 
-### 3.1 方式二：数据库完整版（Node + MySQL）
+### 3.1 方式二：完整版（Java + PostgreSQL）—— 本地开发
 
 #### 环境要求
 
-- Node.js 18 及以上
-- MySQL 8.0 已启动
+| 组件 | 版本 | 说明 |
+| --- | --- | --- |
+| JDK | **21 LTS** | Spring Boot 3.x 要求 17+；本项目按 21 编译 |
+| Maven | 3.9+ | 用于构建；国内建议配 `tools/maven-settings.xml` 走阿里云镜像 |
+| PostgreSQL | 14+（推荐 17） | 需要能创建数据库与角色 |
 
-#### 配置数据库连接
+#### 第 1 步：准备数据库
 
-数据库连接参数在 `config/config.js` 中，可通过环境变量覆盖：
+**方式 A —— 用脚本一键准备（推荐）**
 
 ```bash
+bash tools/pg-setup.sh
+```
+
+脚本会：生成随机口令写入 `backend/.env`（不回显）→ 创建 `course_app` 角色 → 创建 `course_selection` 库
+（并把库与 `public` schema 的属主交给 `course_app`，PostgreSQL 15+ 起 `public` schema 默认归 `pg_database_owner`）→ 导入 `schema-pg.sql`。
+
+**方式 B —— 手工准备**
+
+```bash
+sudo -u postgres psql <<'SQL'
+CREATE ROLE course_app LOGIN PASSWORD '换成你自己的强口令';
+CREATE DATABASE course_selection OWNER course_app ENCODING 'UTF8';
+SQL
+sudo -u postgres psql -d course_selection -c 'ALTER SCHEMA public OWNER TO course_app;'
+```
+
+然后把连接信息写进 `backend/.env`（模板见 `backend/.env.example`）：
+
+```bash
+SERVER_ADDRESS=127.0.0.1
+SERVER_PORT=3000
 DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=你的密码
+DB_PORT=5432
 DB_NAME=course_selection
+DB_USER=course_app
+DB_PASSWORD=你的口令
+DB_INIT=false
 ```
 
-参数优先级：环境变量 > 配置文件默认值。除数据库口令外，令牌密钥、限速阈值、候补确认期等也支持环境变量注入，不硬编码在业务代码中。
+> `backend/.env` 已被 `.gitignore` 排除。源码、脚本、SQL 里**不出现任何口令**，
+> 全部通过环境变量注入，符合"口令不入库、不入版本库"的基本要求。
 
-#### 初始化数据库与启动
+#### 第 2 步：构建并启动后端
 
 ```bash
-cd course-selection-system
-npm install          # 安装 express / mysql2 / bcryptjs
-npm run db:init      # 建库、建表、导入种子数据（会先删除同名旧表）
-npm start            # 启动服务
+cd backend
+mvn -s ../tools/maven-settings.xml -DskipTests clean package   # 产出 target/course-selection-backend.jar
+
+cd ..
+bash tools/run-backend.sh --init     # --init = 首次启动时建表并导入演示数据
 ```
 
-浏览器访问 <http://127.0.0.1:3000>
+看到下面两行即成功：
 
-**Windows 一键启动（推荐）**：直接双击工程根目录下的 `启动选课系统.bat`，
-脚本会自动安装缺失的依赖并启动服务，然后在浏览器打开上面的地址即可。
-关闭该命令行窗口即停止服务。
+```
+Tomcat started on port 3000 (http)
+数据库初始化完成。生产环境请把 app.db.init-on-startup 改回 false。
+```
 
-> 注意：**不要直接双击 `public/index.html`**。前端需要调用后端接口，
-> 必须以 `http://127.0.0.1:3000` 的方式通过服务访问；用 `file://` 打开会因接口不可用而无法登录。
+验证：
+
+```bash
+curl http://127.0.0.1:3000/api/health
+# {"code":0,"message":"操作成功","data":{"status":"UP","time":"..."}}
+```
+
+> **端口为什么不用 `PORT` 变量名？**
+> 很多 IDE、云平台与容器运行时会预设 `PORT` / `SERVER__PORT`（Spring 的宽松绑定会把
+> `SERVER__PORT` 解析成 `server.port`），在毫无察觉的情况下改掉监听端口。
+> 本项目统一用 `SERVER_PORT` / `SERVER_ADDRESS`，并且在 `tools/run-backend.sh` 里
+> 以**命令行参数**下发（命令行优先级高于环境变量与配置文件），从根上杜绝被劫持。
+
+#### 第 3 步：启动前端
+
+前端是纯静态资源。本地开发用仓库自带的零依赖脚本，它同时托管 `frontend/` 并把 `/api` 转发到后端，
+**因此本地也是同源，不需要配 CORS**：
+
+```bash
+node tools/serve-frontend.js            # 前端 http://127.0.0.1:5500，/api → 127.0.0.1:3000
+```
+
+然后浏览器访问 <http://127.0.0.1:5500>。
+
+（可选）想用别的静态服务器也可以，但要注意前端用的是同源相对路径 `/api/xxx`，
+所以需要用 `?api=` 参数或 `window.__API_BASE__` 指定后端地址：
+
+```bash
+cd frontend && python -m http.server 5500
+# 访问 http://127.0.0.1:5500/?api=http://127.0.0.1:3000
+```
+
+> **不要直接双击 `frontend/index.html`。** 前端要调用后端接口，用 `file://` 打开无法工作。
+> 线上部署后前后端由同一个 Nginx 提供，天然同源；`CORS_ORIGINS` 只在调试或前端单独部署时才需要动。
+
+**Windows 一键启动**：双击工程根目录的 `启动选课系统.bat`，脚本会自动检查 jar 是否存在并启动后端
+（前端仍需按上面的方式单独启动）。
 
 #### 演示账号
 
@@ -159,7 +259,8 @@ npm start            # 启动服务
 | 教务管理员 | `academic` | 周教务 | 课程目录、开课计划、批次、学分规则、名额、公告 |
 | 系统管理员 | `sysadmin` | 孙运维 | 用户与权限、审计日志、运行监控 |
 
-登录页提供了账号快捷填入按钮，点击即可填入账号，口令需手动输入。
+种子数据共 14 个账号（8 学生 / 4 教师 / 教务 / 系统管理员）。口令在种子脚本里是 `__PWD_HASH__` 占位符，
+由 `DbInitializer` 在导入时替换为 BCrypt 哈希，因此**版本库里不存在任何口令（连哈希也没有）**。
 
 ## 4. 功能清单
 
@@ -178,7 +279,7 @@ npm start            # 启动服务
 ### 节次时间（全校统一《课时表》）
 
 每天 13 节、每节 40 分钟；课表、排课编辑器、冲突检测与课时表展示均以此为准。
-常量定义在 `server/utils/period.js`（服务端）与 `public/js/ui.js`（前端），两处保持同源。
+常量定义在 `backend/.../util/Period.java`（服务端）与 `frontend/js/ui.js`（前端），两处保持同源。
 
 | 时段 | 大节 | 小节 | 起止时间 |
 | --- | --- | --- | --- |
@@ -187,11 +288,6 @@ npm start            # 启动服务
 | 下午 | 三 | 6 / 7 | 13:00~13:40 / 13:45~14:25 |
 | 下午 | 四 | 8 / 9 / 10 | 14:45~15:25 / 15:30~16:10 / 16:15~16:55 |
 | 晚上 | 五 | 11 / 12 / 13 | 18:00~18:40 / 18:45~19:25 / 19:30~20:10 |
-
-- 学生「我的课表」左侧标注时段（上午/下午/晚上）与每节起止时间；
-- 学生「选课规则」页展示完整课时表；
-- 排课时段编辑器（教师/教务）节次上限为 13，选项中带起止时间；
-- 课程/选课列表中的上课时间文案含节次起止时间，如「周一 第 1-2 节 08:00~09:25」。
 
 ### 教师端
 - 我的开课列表（含已选/容量、候补人数、热度）；维护上课时间与地点（支持多时段）；容量由教务设定，教师不可修改。
@@ -216,19 +312,39 @@ npm start            # 启动服务
 
 | 规则 | 实现位置与做法 |
 | --- | --- |
-| 时间冲突检测 | `ruleService.detectConflict`：星期相同 + 节次区间相交 + 单双周不互斥，纯 SQL 一次比对全部排课时段；一门课任一时段冲突即整体冲突 |
-| 防超卖 | `enrollmentService.occupySeat`：`UPDATE t_course_offering SET enrolled = enrolled + 1 WHERE id = ? AND enrolled < capacity AND status <> 0`，影响行数为 0 即视为已满；配合 `uk_student_offering` 唯一约束形成最后防线 |
+| **防超卖（并发核心）** | `EnrollmentService.occupySeat`：`UPDATE t_course_offering SET enrolled = enrolled + 1 WHERE id = ? AND enrolled < capacity AND status <> 0`。把"判断是否还有名额"和"名额自增"压缩进**同一条 SQL**，由 PostgreSQL 的行锁保证原子性；受影响行数为 0 即视为已满（2001）。配合 `uk_student_offering` 唯一约束形成最后防线。**不依赖任何应用层锁，也不依赖 Redis。** |
+| 时间冲突检测 | `RuleService.detectConflict`：星期相同 + 节次区间相交 + 单双周不互斥，纯 SQL 一次比对全部排课时段；一门课任一时段冲突即整体冲突 |
 | 校验顺序 | 鉴权 → 幂等 → 批次(2005) → 重复(2006/2007) → 占名额(2001) → 冲突(2002) → 学分(2003) → 先修(2004) → 落库；第 6~8 步失败整个事务回滚，已占名额自动归还 |
 | 退课 | 截止时间校验(2008) → 记录置为已退 → 释放名额 → 写审计与通知 → 触发候补递补 |
 | 换课 | 单一事务：预占目标名额 → 冲突/学分/先修校验（冲突校验排除即将释放的原课程）→ 释放原名额 → 重建记录；任一步失败返回 2009 且原课程不变 |
 | 候补递补 | 名额释放后取 `queue_no` 最小者，重新执行完整校验：通过则占名额、生成来源为"候补递补"的记录、置为已递补并设 24 小时确认期；不通过则置为已失效、发"递补失败"通知并顺延下一名 |
+| 候补排位号 | 先 `SELECT id FROM t_course_offering WHERE id = ? FOR UPDATE` 锁住开课行，把同一门课的入队串行化，再取 `MAX(queue_no) + 1`（详见[第 9 章](#9-从-mysql-迁移到-postgresql-的踩坑记录)） |
 | 幂等 | 写接口要求携带 `requestId`，服务端缓存 5 分钟，重复请求直接返回首次结果 |
 | 防脚本刷课 | 60 秒内同一账号超过 10 次写请求返回 9001，超过 20 次要求安全验证 |
-| 权限矩阵 | `middleware/auth.js` 的 `requireRole`，越权访问返回 1003 并写入审计日志 |
+| 权限矩阵 | `AuthInterceptor` + `@RequireRole`，越权访问返回 1003 并写入审计日志 |
+
+### 事务在 Java 侧怎么写
+
+"阶段一"的 Node 版为了避免"事务里再去连接池取连接"造成的连接池耗尽，到处显式传递 `conn`。
+Spring 的 `TransactionTemplate` 把事务绑定在**当前线程**上，`JdbcTemplate` 会自动加入，
+因此业务代码里不再需要传连接对象，也就不会出现那个死锁：
+
+```java
+long queueNo = db.withTransaction(() -> {
+    db.queryOne("SELECT id FROM t_course_offering WHERE id = ? FOR UPDATE", offeringId);
+    Map<String, Object> row = db.queryOne(
+            "SELECT COALESCE(MAX(queue_no), 0) AS max_no FROM t_waitlist WHERE offering_id = ?", offeringId);
+    long nextNo = Db.num(row, "max_no") + 1;
+    db.update("INSERT INTO t_waitlist (...) VALUES (?, ?, ?, NOW(), 1) ON CONFLICT ... ", ...);
+    return nextNo;
+});
+```
+
+`Db.withTransaction(Supplier)` 是唯一的显式事务入口，事务边界在代码里一眼可见。
 
 ## 6. 接口清单
 
-完整清单见设计文档表 4，实现与文档一致：
+完整清单见设计文档表 4，实现与文档一致（共 60+ 个接口，下表为分类概览）：
 
 ```
 POST   /api/auth/login                    匿名        登录，返回令牌与用户信息
@@ -272,72 +388,180 @@ GET                 /api/admin/dashboard academic    数据概览
 GET/POST/PUT        /api/admin/users     sys_admin   用户与权限管理
 GET                 /api/admin/audit-logs sys_admin  审计日志
 GET                 /api/admin/monitor   sys_admin   运行监控
+
+GET    /api/health                       匿名        健康检查（数据库连通性）
+GET    /api/meta/endpoints               匿名        接口自描述清单
 ```
 
-错误码与设计文档表 5 一致（0 成功、1001~1003 认证与权限、2001~2010 选课业务、9001~9002 限流与系统），
-另补充 2011 未选该课程、2012 开课已停开、2013 不在候补队列、2014 开课不存在、9003 参数有误等扩展码。
+错误码与设计文档表 5 一致（0 成功、1001~1003 认证与权限、2001~2010 选课业务、9001~9003 限流与系统）。
 
 ## 7. 测试
 
-### 7.1 后端测试
-
-先启动服务，再执行测试脚本：
-
-```bash
-npm start                 # 终端 A
-node tests/smoke.js       # 终端 B：接口冒烟测试，19 项
-node tests/acceptance.js  # 终端 B：验收测试，对应文档表 28 的 TC-01 ~ TC-15
-```
-
-验收测试覆盖：并发不超卖、重复选课、幂等、全周冲突、单双周不冲突、多时段冲突、
-超学分、先修未满足、批次外、候补自动递补、递补二次校验失败顺延、换课目标已满、
-退课截止、越权访问、防刷限速。测试数据使用 `ZZTEST` / `ZZC` / `ZZTEACH` 前缀，执行后自动清理。
-
-### 7.2 前端集成验证
-
-`.uicheck/ui-check.js` 用 jsdom 加载真实页面 `public/index.html`，并把 `fetch` 指向真实后端，
-真正执行 `public/js` 下的前端模块，验证：四类角色登录、按角色生成的菜单项、逐页渲染无报错、
-选课中心课程卡片与状态标签、课表周视图、开课详情弹窗、破坏性操作的二次确认，
-同时统计未捕获异常与控制台错误。
+三套测试全部是**黑盒**的：只通过 HTTP 调接口，数据库只用于**校验**结果（不绕过业务逻辑写数据）。
+验收与并发测试需要读数据库，因此运行前加载 `backend/.env`：
 
 ```bash
-cd .uicheck && npm install   # 仅首次，安装 jsdom
-npm start                    # 回到工程根目录启动服务
-cd .uicheck && node ui-check.js
+cd course-selection-system/tests && npm install   # 仅首次：安装 pg 与 bcryptjs
+
+cd .. && bash tools/run-backend.sh --init         # 终端 A：启动后端（--init 重置演示数据）
+
+set -a && . backend/.env && set +a                # 终端 B
+node tests/smoke.js          # 19 项
+node tests/acceptance.js     # 15 项
+node tests/concurrency.js    # 17 项
 ```
 
-该目录属于开发期验证工具，不参与服务端运行，删除后不影响工程。
+### 7.1 冒烟测试（19 项）
 
-### 7.3 单文件网页版验证
+健康检查、未登录拦截、四角色登录、当前学期、课程列表与筛选、我的已选、课表、候补、通知、
+教师开课、教务概览与开课计划、选课批次、用户管理、运行监控、审计日志，以及两类越权拦截。
 
-单文件版有两层独立验证，均不需要启动任何服务：
+### 7.2 验收测试（15 项，对应文档表 28 的 TC-01 ~ TC-15）
+
+100 并发抢 5 个名额、重复选课、`requestId` 幂等、全周冲突、单双周不冲突、多时段冲突、
+超学分、先修未满足、批次外选课、满员候补后有人退课触发递补、递补对象已冲突则顺延、
+换课目标已满、退课截止后拒绝、越权写审计、60 秒内 15 次写请求触发限速。
+
+测试数据使用 `ZZTEST` / `ZZC` / `ZZTEACH` 前缀，执行后自动清理。
+
+### 7.3 并发与幂等实测（17 项）
+
+这是本次作业"数据冲突要在数据库控制、要考虑多人"的直接证据链：
+
+| 场景 | 做法 | 断言 |
+| --- | --- | --- |
+| ① 超卖 | 8 名学生**同时**发起选课，目标课程容量 3 | 成功恰好 3 人、其余 5 单返回 2001、数据库 `enrolled` **严格等于 3**、`remaining ≥ 0`、选课记录条数与 `enrolled` 一致 |
+| ② 幂等 | 同一学生用**同一个 requestId** 连发两次 | 第二次返回与首次完全一致的返回体、`enrolled` 仍为 1、选课记录仍为 1 条 |
+| ③ 候补递补 | A 占满唯一名额 → B 加入候补（排位 1）→ A 退课 | 退课返回中带 `PROMOTED` 递补动作、`enrolled` 仍为 1（名额被接手而非凭空少一个）、B 的候补状态变为"已递补"、B 的已选列表出现该课程 |
+
+**实测结果（干净数据库上连续执行）**：
+
+```
+===== 冒烟 =====   共 19 项，通过 19 项，失败 0 项
+===== 验收 =====   共 15 条，通过 15 条，失败 0 条
+===== 并发 =====   共 17 项，通过 17 项，失败 0 项
+```
+
+其中并发场景 ① 的一次真实请求码序列：`2001,0,0,0,2001,2001,2001,0,2001` ——
+8 个请求里恰好 3 个 `code=0`，其余都是"已满"，`enrolled` 最终为 3。
+
+### 7.4 前端集成验证（53 项，jsdom 真实执行前端模块）
+
+后端接口对了不等于页面能用——字段名对不上、模块路径断了、运行时抛异常，接口测试都发现不了。
+`.uicheck/ui-check.js` 用 jsdom 加载真实的 `frontend/index.html`，
+把 `fetch` 指向真实后端，**真实执行 `frontend/js/` 下的 ES Module**，覆盖：
+
+- 四类角色登录、按角色生成菜单
+- 每个角色逐页渲染无报错，并统计渲染内容长度（防止"渲染了个空壳"）
+- 选课中心课程卡片与状态标签（可选 / 已满 / 时间冲突 / 已选 / 候补中 / 热度）
+- 我的课表周视图、全天 13 节、时段列、晚上时段、勾选后压缩为有课节次
+- 选课规则页课时表、开课详情弹窗、破坏性操作的二次确认
+- 连续登录失败后出现验证码并可作答通过
+- **统计未捕获异常与控制台错误，必须为 0**
 
 ```bash
-node web-build/test-engine.js    # 引擎回归测试：74 项，覆盖全部核心业务规则
-node .uicheck/static-check.js    # 端到端验证：加载构建产物真实执行，51 项
+cd .uicheck && npm install    # 仅首次，安装 jsdom
+cd .. && bash tools/run-backend.sh
+node .uicheck/ui-check.js     # 53 项
 ```
 
-`test-engine.js` 在 Node 中直接驱动内嵌引擎，用与数据库版验收测试相同的场景
-（并发抢占、幂等、冲突、学分、先修、批次、候补递补、换课、退课截止、越权、限速、通知公告）
-逐项断言；`static-check.js` 则把构建产出的 .html 交给 jsdom 真实执行，
-验证四类角色登录、菜单、逐页渲染与学生端交互，并统计未捕获异常与控制台错误。
+### 7.5 阶段一（单文件版）自测工具
+
+```bash
+node tools/test-engine.js         # 引擎回归测试：74 项，覆盖全部核心业务规则
+node .uicheck/static-check.js     # 端到端验证：加载构建产物真实执行，51 项
+```
+
+### 7.6 回归总数
+
+在干净数据库上连续执行的实际结果：
+
+```
+后端  smoke.js          19 项   通过 19   （接口冒烟）
+后端  acceptance.js     15 项   通过 15   （TC-01 ~ TC-15 端到端验收）
+后端  concurrency.js    17 项   通过 17   （并发防超卖 / 幂等 / 候补递补）
+前端  ui-check.js       53 项   通过 53   （四角色逐页渲染 + 交互，零运行时异常）
+                       ─────────────────
+                       104 项   全部通过
+```
 
 ## 8. 与设计文档的对应关系
 
 | 文档章节 | 实现落点 |
 | --- | --- |
-| 2.2 技术选型（必做档） | HTML5 + CSS3 + 原生 JS / Node.js + Express / MySQL 8.0 |
-| 2.4 接口设计与表 4 | `server/routes/*`，统一返回体与分页结构 |
-| 2.5 错误码表 5 | `server/utils/errors.js`，前端 `public/js/api.js` 中映射为提示文案 |
-| 第 3 章 界面设计 | `public/`，顶栏 + 左侧栏 + 主体区布局，响应式与无障碍要点 |
-| 4.2 / 4.3 / 4.4 / 4.6 / 4.7 规则 | `server/services/ruleService.js` |
-| 5.2 ~ 5.6 数据库设计 | `db/schema.sql`（18 张表、约束、索引、数据字典取值） |
-| 6.1 / 6.2 / 6.3 / 6.5 核心流程 | `server/services/enrollmentService.js`、`waitlistService.js` |
-| 表 26 角色权限矩阵 | `server/middleware/auth.js` 的 `requireRole` |
+| 2.2 技术选型 | 前端 HTML5 + CSS3 + 原生 JS / 后端 Spring Boot 3 + Spring MVC / 数据库 PostgreSQL 17 |
+| 2.4 接口设计与表 4 | `backend/.../web/*Controller.java`，统一返回体与分页结构 |
+| 2.5 错误码表 5 | `common/ErrorCode.java`，前端 `frontend/js/api.js` 中映射为提示文案 |
+| 第 3 章 界面设计 | `frontend/`，顶栏 + 左侧栏 + 主体区布局，响应式与无障碍要点 |
+| 4.2 / 4.3 / 4.4 / 4.6 / 4.7 规则 | `service/RuleService.java` + `service/EnrollmentService.java` |
+| 5.2 ~ 5.6 数据库设计 | `backend/src/main/resources/db/schema-pg.sql`（18 张表、约束、索引、数据字典取值） |
+| 6.1 / 6.2 / 6.3 / 6.5 核心流程 | `service/EnrollmentService.java`、`service/WaitlistService.java` |
+| 表 26 角色权限矩阵 | `security/AuthInterceptor.java` + `security/RequireRole.java` |
 | 表 28 关键验收用例 | `tests/acceptance.js` |
 | 8.3 落地优先级 | 第一、二优先全部实现；第三优先全部实现；可选增强（Redis、消息队列、排队、CDN）未引入，见下节 |
 
-## 9. 未实现项与说明
+## 9. 从 MySQL 迁移到 PostgreSQL 的踩坑记录
+
+作业要求数据库改用 PostgreSQL。为避免"重写一遍、逻辑对不上"，做法是：
+**保留原有 18 张表与 SQL 语义，只把方言差异隔离在少数几个地方**，并把它写成可复查的规则。
+
+### 9.1 脚本层：用转换器把差异显式化
+
+`tools/mysql2pg.py` 把 MySQL 种子脚本转换成 PostgreSQL 脚本，规则全部写在脚本注释里：
+
+| MySQL | PostgreSQL |
+| --- | --- |
+| `` `table` `` 反引号 | 裸标识符 |
+| `AUTO_INCREMENT` | `GENERATED BY DEFAULT AS IDENTITY` |
+| `TINYINT` / `DATETIME` | `SMALLINT` / `TIMESTAMP` |
+| `ON UPDATE CURRENT_TIMESTAMP` | `BEFORE UPDATE` 触发器调用 `set_updated_at()` |
+| `UPDATE t AS a SET a.c = 1` | `SET c = 1`（PG 禁止在 `SET` 里写别名限定） |
+| `DATE_ADD(NOW(), INTERVAL 30 DAY)` | `NOW() + INTERVAL '30 days'` |
+| `IFNULL(x, y)` | `COALESCE(x, y)` |
+| 自增序列 | 导入后对 18 张表逐一 `setval(pg_get_serial_sequence(...))` 校正 |
+
+`updated_at` 触发器函数体刻意用**单引号**而不是 `$$` 美元引用：这样应用启动时可以直接复用
+Spring 的 `ScriptUtils` 逐句执行 schema 脚本（它懂引号和注释，但不懂美元引用）。
+
+### 9.2 代码层：踩到的 4 个真实坑
+
+1. **整数除法会截断。** MySQL 的 `/` 返回小数，`o.enrolled / o.capacity` 直接可用；
+   PostgreSQL 的整数相除结果还是整数，利用率排序会恒为 0 或 1。
+   修法：`o.enrolled::numeric / NULLIF(o.capacity, 0)`，并把 `ROUND` 的参数显式转 `numeric`。
+
+2. **`IN (?)` 不会自动展开。** MySQL 驱动会把数组参数展开成列表，PostgreSQL JDBC 不会。
+   修法：在 `Db.prepare()` 里按参数类型自动把 `IN (?)` 展开为 `IN (?,?,…)`；
+   集合为空时展开为 `IN (NULL)`（语义上是"永不匹配"，避免生成非法 SQL）。
+
+3. **没有 `insertId`。** 修法：`Db.insertReturningId()` 自动补 `RETURNING id` 并取回主键。
+
+4. **`FOR UPDATE` 不能和聚合函数一起用。** 这条最隐蔽：
+   `SELECT COALESCE(MAX(queue_no), 0) FROM t_waitlist WHERE offering_id = ? FOR UPDATE`
+   在 MySQL 下能跑（加锁被忽略），在 PostgreSQL 下直接报 `0A000 feature_not_supported`；
+   更麻烦的是 HikariCP 会把这条连接标记为 broken，导致事务回滚也失败，
+   前端最终只看到一个笼统的 `9002 系统繁忙`，堆栈里还套着"JDBC rollback failed"。
+   修法：先 `SELECT id FROM t_course_offering WHERE id = ? FOR UPDATE` 锁住开课行，
+   把同一门课的入队串行化，再取 `MAX(queue_no)` —— 语义等价，且是 PG 允许的写法。
+
+### 9.3 语言层：Java 文本块的行尾空白陷阱
+
+Java 的文本块（`"""`）会**剥离每行行尾的空白**。于是
+
+```java
+db.query("""
+        SELECT ...
+         WHERE """ + where + " ORDER BY ...", params);
+```
+
+里 `WHERE ` 后的空格被吃掉，拼出来是 `WHEREo.term_id = ?` → `syntax error at or near "WHEREo"`。
+正确写法是用 `\s` 转义（文本块里唯一不会被剥离的空白）写成 `WHERE\s"""`。
+
+同一个坑还引出一个**更危险**的问题：为了说明这件事，我在 SQL 注释里写了一个带 `?` 的示例，
+结果 `Db.prepare()` 把注释里的 `?` 也当成占位符，而它当时遇到"占位符多于参数"只会**默默补一个 null**，
+最终由 PostgreSQL 抛出「栏位索引超过许可范围：4，栏位数：3」，排查成本极高。
+现在 `Db.prepare()` 在这种情况下直接抛异常并打印完整 SQL，让这类错误在第一时间暴露。
+
+## 10. 未实现项与说明
 
 设计文档 8.3 中标注为"可选增强"的能力未纳入本次实现，系统按文档描述退化为
 "数据库条件更新 + 单机限流"，功能与正确性不受影响：
@@ -345,32 +569,31 @@ node .uicheck/static-check.js    # 端到端验证：加载构建产物真实执
 - **Redis 余量缓存与预扣**：运行监控页的"缓存与数据库余量差值"恒为 0。
 - **消息队列削峰**：选课在请求线程内同步落库，未做异步化。
 - **网关排队机制**：运行监控页的"排队队列长度"恒为 0。
-- **CDN 分发**：静态资源由应用服务直接托管。
-- **会话存储**：登录会话保存在服务端内存，进程重启后需要重新登录（生产环境应替换为 Redis 或数据库）。
+- **CDN 分发**：静态资源由 Nginx 托管。
+- **会话存储**：登录会话保存在服务端内存（`SessionStore`），进程重启后需要重新登录；
+  多实例部署时应替换为 Redis 或数据库。
 
 此外，按文档 1.3 的系统边界，本系统不与教务系统、统一认证、支付等外部系统对接，
 学籍与成绩数据以本地数据表维护。
 
-## 10. 部署上线
+## 11. 部署上线
 
-想让别人用网址打开，有两条路，详细步骤见 **[云服务器部署指南.md](./云服务器部署指南.md)**：
+详细步骤见 **[云服务器部署指南.md](./云服务器部署指南.md)**，一键脚本为 `deploy.sh`：
 
-| 路线 | 上传什么 | 成本 | 数据 |
-| --- | --- | --- | --- |
-| **A. 静态托管**（推荐先做） | `docs/index.html`（= 单文件版） | 0 元，5 分钟 | 浏览器内存，刷新重置 |
-| **B. 云服务器** | 整个工程（Node + MySQL） | 约 50~120 元/月 | MySQL 持久化，支持并发 |
+```bash
+# 在云服务器上（Ubuntu）
+git clone https://github.com/Tanyunx/course-selection-system.git
+cd course-selection-system
+sudo bash deploy.sh
+```
 
-**路线 A** 无需后端，可直接放到 GitHub Pages、腾讯云 COS、阿里云 OSS、Vercel、Netlify，
-或使用 WorkBuddy 内置的一键发布能力。`npm run build` 之外，构建脚本每次都会自动同步产出
-`docs/index.html` 作为静态站点入口。
+脚本会依次完成：装 JDK 21 → 装 PostgreSQL 并建库建专用账号（随机口令，权限 600 写入 `backend/.env`）
+→ 装 Nginx → Maven 构建后端 jar → 注册 systemd 服务并开机自启 → 配置 Nginx
+（托管 `frontend/` 静态资源 + `/api` 反向代理）→ 可选用 certbot 申请 HTTPS 证书。
 
-**路线 B** 的关键注意点（详见指南）：
+三条上线要点（最容易漏）：
 
-- 服务器上必须把 `.env` 里的 `HOST` 改成 `0.0.0.0`，否则只有服务器本机能访问；
-- 云控制台**安全组要放行端口**（80 / 3000），这一步最容易漏；
-- 用 `pm2` 常驻并设置开机自启，别直接 `npm start` 挂在终端上；
-- MySQL 使用专用账号而非 root，`AUTH_SECRET` 要换成随机串。
-
-配置文件加载顺序：**真实环境变量 > 项目根目录 `.env` 文件 > 代码内置默认值**。
-`.env` 由 `config/config.js` 以零依赖方式读取，模板见 `.env.example`（该文件仅作模板，不含真实口令）。
-
+1. **云控制台安全组要放行端口**（80 / 443）；后端只监听 `127.0.0.1:3000`，**不要直接暴露 3000**。
+2. **前端与后端分开部署**才叫前后端分离：前端由 Nginx 托管，`/api` 反代到 Spring Boot；
+   浏览器只看到同源的 443，跨域问题在这个结构下天然消失（`CORS_ORIGINS` 仅在同源之前或调试时需要）。
+3. **`AUTH_SECRET` 要换成随机长串**（`openssl rand -hex 32`），`DB_INIT` 跑完首次初始化后改回 `false`。

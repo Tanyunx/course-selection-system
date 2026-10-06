@@ -2,14 +2,15 @@
   "name": "course-selection-system",
   "version": "3.0.0",
   "description": "基于 B/S 架构的在线选课系统（Web 应用与开发课程作业）",
-  "main": "server/app.js",
+  "main": "src/app.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node server/app.js",
-    "dev": "node --watch server/app.js",
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js",
     "db:init": "node scripts/init-db.js",
-    "build": "node web-build/build.js",
-    "test": "node tests/run.js"
+    "test": "node tests/run.js",
+    "test:smoke": "node tests/smoke.js",
+    "test:acceptance": "node tests/acceptance.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

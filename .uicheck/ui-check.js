@@ -30,7 +30,7 @@ function check(name, pass, detail = '') {
 
 /** 准备一份 ESM 版本的 public/js 副本（package.json 声明 type=module） */
 function prepareEsmCopy() {
-  const src = path.join(PROJECT, 'public', 'js');
+  const src = path.join(PROJECT, 'frontend', 'js');
   const dst = path.join(__dirname, 'esm', 'js');
   fs.rmSync(path.join(__dirname, 'esm'), { recursive: true, force: true });
   fs.mkdirSync(dst, { recursive: true });
@@ -83,7 +83,7 @@ async function main() {
   process.on('unhandledRejection', (e) => errors.push('unhandledRejection: ' + (e && e.message)));
   process.on('uncaughtException', (e) => errors.push('uncaughtException: ' + (e && e.message)));
 
-  const html = fs.readFileSync(path.join(PROJECT, 'public', 'index.html'), 'utf8');
+  const html = fs.readFileSync(path.join(PROJECT, 'frontend', 'index.html'), 'utf8');
   const esmDir = prepareEsmCopy();
   check('准备前端 ESM 副本', true, esmDir.replace(PROJECT, '.'));
 
@@ -100,7 +100,7 @@ async function main() {
   check('页面初始化：演示账号按钮已渲染', doc.querySelectorAll('#demo-list button').length >= 4, `${doc.querySelectorAll('#demo-list button').length} 个`);
 
   // 静态检查：[hidden] 兜底规则必须存在，否则类选择器的 display 会覆盖 hidden 属性
-  const cssText = fs.readFileSync(path.join(PROJECT, 'public', 'css', 'app.css'), 'utf8');
+  const cssText = fs.readFileSync(path.join(PROJECT, 'frontend', 'css', 'app.css'), 'utf8');
   check(
     'CSS 保留 [hidden] 兜底规则',
     /\[hidden\]\s*\{[^}]*display:\s*none[^}]*!important/.test(cssText),

@@ -1,0 +1,89 @@
+server:
+  # 刻意不用 PORT 这个变量名：很多 IDE、云平台和容器运行时会预设 PORT，
+  # 会在毫无察觉的情况下改掉监听端口。这里统一用 SERVER_PORT / SERVER_ADDRESS。
+  port: ${SERVER_PORT:3000}
+  address: ${SERVER_ADDRESS:127.0.0.1}
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
+  # 未匹配到任何 Controller 时抛异常，交给 GlobalExceptionHandler 统一返回 9003/404
+  error:
+    whitelabel:
+      enabled: false
+
+spring:
+  application:
+    name: course-selection-backend
+
+  # ---------------------------------------------------------------
+  # PostgreSQL 数据源
+  #   本地开发：免安装实例监听 127.0.0.1:55432（见 tools/pg-setup.sh）
+  #   生产环境：全部通过环境变量注入，源码中不出现任何口令
+  # ---------------------------------------------------------------
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:127.0.0.1}:${DB_PORT:55432}/${DB_NAME:course_selection}?ApplicationName=course-selection&reWriteBatchedInserts=true
+    username: ${DB_USER:course_app}
+    password: ${DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL:10}
+      minimum-idle: 2
+      pool-name: CourseSelectionPool
+      connection-timeout: 10000
+      # 数据库全部使用 timestamp without time zone，会话时区固定为上海，
+      # 与 Node 版 timezone:'local' 的行为保持一致
+      connection-init-sql: SET TIME ZONE 'Asia/Shanghai'
+
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+
+  jackson:
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+      fail-on-empty-beans: false
+    default-property-inclusion: always
+
+  threads:
+    virtual:
+      enabled: true
+
+# ------------------------- 业务配置 -------------------------
+# 说明：Node 版的 config/config.js 会把项目根目录的 .env 读进 process.env；
+# 这里由 tools/run-local.sh 或 systemd 的 EnvironmentFile 负责加载 backend/.env。
+app:
+  auth:
+    # 会话令牌签名密钥：生产环境必须通过环境变量覆盖
+    secret: ${AUTH_SECRET:course-selection-dev-secret-please-override}
+    # 会话空闲超时（分钟）
+    idle-timeout-minutes: ${AUTH_IDLE_MINUTES:30}
+    # 登录连续失败达到该次数后要求输入验证码
+    captcha-after-failures: ${AUTH_CAPTCHA_AFTER:5}
+  rate-limit:
+    window-seconds: ${RL_WINDOW_SECONDS:60}
+    soft-limit: ${RL_SOFT_LIMIT:10}
+    hard-limit: ${RL_HARD_LIMIT:20}
+  # 幂等请求记录保留时长（分钟）
+  idempotency-ttl-minutes: ${IDEMPOTENCY_TTL_MINUTES:5}
+  business:
+    # 候补递补确认期（小时）
+    waitlist-confirm-hours: ${WAITLIST_CONFIRM_HOURS:24}
+    # 退课截止：补退选批次结束后的第 N 天 23:59
+    drop-deadline-days-after-batch: ${DROP_DEADLINE_DAYS:7}
+  cors:
+    # 前后端分离：允许的前端来源，逗号分隔；* 表示放行任意来源（Bearer 令牌鉴权，不用 Cookie）
+    allowed-origins: ${CORS_ORIGINS:*}
+  # 启动时自动建库建数据（等价于 Node 版的 npm run db:init），默认关闭
+  db:
+    init-on-startup: ${DB_INIT:false}
+
+logging:
+  level:
+    root: INFO
+    com.campus.course: INFO
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level %logger{0} - %msg%n"
