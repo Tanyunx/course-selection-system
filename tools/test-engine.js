@@ -7,10 +7,11 @@
  * 覆盖并发防超卖、重复选课、幂等、时间冲突、单双周、超学分、先修、
  * 批次准入、候补自动递补、换课、退课截止、越权与限速等核心规则。
  *
- * 运行：node web-build/test-engine.js
+ * 运行：node tools/test-engine.js
  */
 
-require('./mock/index.js');
+// 目录结构重构后 mock 数据层由 web-build/mock/ 迁到 frontend/mock/
+require('../frontend/mock/index.js');
 
 const E = { handle: global.handle, ROUTES: global.ROUTES, DEMO_SECRET: global.DEMO_SECRET };
 

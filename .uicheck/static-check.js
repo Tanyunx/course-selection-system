@@ -14,7 +14,9 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM, VirtualConsole } = require('jsdom');
 
-const ENGINE = require('../web-build/mock/index.js');
+// 目录结构在「前后端分离」重构后由 web-build/ 改名为 tools/、public/ 改名为 frontend/，
+// mock 数据层最终落在 frontend/mock/。这里只取它导出的 DEMO_SECRET 用于断言演示口令。
+const ENGINE = require('../frontend/mock/index.js');
 const HTML_PATH = path.join(__dirname, '..', '选课系统-单文件版.html');
 
 let passed = 0;

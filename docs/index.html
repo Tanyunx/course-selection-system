@@ -4441,6 +4441,32 @@ function periodRangeText(start, end) {
 
 const TOKEN_KEY = 'cs_token';
 
+/**
+ * 后端 API 的基地址。
+ *
+ * 生产 / 推荐用法：留空（返回空串），接口写成相对路径 `/api/xxx`。
+ * 前端由 Nginx 托管、`/api` 反代到后端，两者同源，天然没有跨域问题。
+ *
+ * 本地开发时如果前端与后端不在同一个端口上（例如前端跑在 5500、后端在 3000），
+ * 可以用下面两种方式之一指定后端地址，无需改动代码：
+ *   1. 访问时带上查询参数：http://127.0.0.1:5500/?api=http://127.0.0.1:3000
+ *   2. 在页面里提前设置：window.__API_BASE__ = 'http://127.0.0.1:3000'
+ * 更省事的做法是用仓库自带的代理脚本 `node tools/serve-frontend.js`，
+ * 它同时托管前端并把 /api 转发到后端，此时也不需要配置这里。
+ */
+function apiBase() {
+  if (typeof window === 'undefined') return '';
+  const strip = (v) => String(v).replace(/\/+$/, '');
+  if (window.__API_BASE__) return strip(window.__API_BASE__);
+  try {
+    const fromQuery = new URLSearchParams(window.location.search).get('api');
+    if (fromQuery) return strip(fromQuery);
+  } catch (e) {
+    /* 取不到就用同源 */
+  }
+  return '';
+}
+
 const ERR_TEXT = {
   0: '操作成功',
   1001: '账号或密码错误，请重新输入',

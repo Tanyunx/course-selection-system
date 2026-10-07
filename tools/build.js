@@ -7,21 +7,27 @@
  * 产出双击即可运行、无需 Node、无需 MySQL、无需任何安装的网页。
  *
  * 处理要点：
- *  1. 种子数据来自 web-build/mock/data.js（由 export-data.js 从本机 MySQL 导出，与数据库版同源）；
+ *  1. 种子数据来自 frontend/mock/data.js（阶段一从数据库导出，与数据库版同源）；
  *  2. 业务规则引擎（core/rules/services/routes）包进 IIFE，仅暴露 ENGINE，避免与页面变量重名；
  *  3. 前端各页面模块同样是 ES Module，构建时去掉 import/export，
  *     并把 `import * as xxx` 还原为命名空间对象，使模块化写法在单文件里继续可用；
  *  4. api.js 的网络请求函数替换为直接调用本地引擎，页面代码一行不改。
  *
- * 运行：node web-build/build.js
+ * 运行：node tools/build.js
+ *
+ * 产物：
+ *   - 选课系统-单文件版.html  —— 双击即用，零依赖、纯离线
+ *   - docs/index.html         —— 同一份内容，供 GitHub Pages（main 分支 + /docs）发布
  */
 
 const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const MOCK = path.join(__dirname, 'mock');
-const PUBLIC = path.join(ROOT, 'public');
+// 目录结构在「前后端分离」重构后由 public/ 改名为 frontend/、web-build/ 改名为 tools/，
+// 这里跟随更新，避免构建脚本继续指向已不存在的旧路径。
+const MOCK = path.join(ROOT, 'frontend', 'mock');
+const PUBLIC = path.join(ROOT, 'frontend');
 
 const read = (p) => fs.readFileSync(p, 'utf8');
 

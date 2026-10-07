@@ -3,3 +3,13 @@
 *.sh  text eol=lf
 *.bat text eol=crlf
 *.cmd text eol=crlf
+
+# Maven Wrapper：mvnw 是 shell 脚本必须 LF，mvnw.cmd 是批处理必须 CRLF。
+# 少了这两行，Linux 服务器上 ./mvnw 会直接报错。
+mvnw      text eol=lf
+mvnw.cmd  text eol=crlf
+
+# 二进制资源不做换行符转换
+*.png binary
+*.jar binary
+*.zip binary

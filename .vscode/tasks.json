@@ -1,0 +1,128 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "① 建库（首次运行）",
+      "detail": "生成随机的数据库口令写入 backend/.env，创建 course_app 角色与 course_selection 库，导入 18 张表",
+      "type": "shell",
+      "command": "bash tools/pg-setup.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "② 打包后端",
+      "detail": "Maven 打包成 backend/target/course-selection-backend.jar（走阿里云镜像）",
+      "type": "shell",
+      "command": "bash tools/build-backend.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "③ 启动后端（3000）",
+      "detail": "加载 backend/.env 后启动 Spring Boot，监听 127.0.0.1:3000",
+      "type": "shell",
+      "command": "bash tools/run-backend.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "group": "dev", "panel": "dedicated" }
+    },
+    {
+      "label": "③ 启动后端 · 重建演示库",
+      "detail": "DROP 重建 18 张表并重新导入种子数据后再启动（演示 / 答辩前用）",
+      "type": "shell",
+      "command": "bash tools/run-backend.sh --init",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "group": "dev", "panel": "dedicated" }
+    },
+    {
+      "label": "④ 启动前端（5500）",
+      "detail": "零依赖静态服务器：托管 frontend/ 并把 /api 反向代理到 3000，本地保持同源、无需配 CORS",
+      "type": "shell",
+      "command": "node tools/serve-frontend.js",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "group": "dev", "panel": "dedicated" }
+    },
+    {
+      "label": "构建单文件演示版",
+      "detail": "把前端 + 规则引擎 + 种子数据内联成一个 HTML（双击即用，零依赖离线）",
+      "type": "shell",
+      "command": "node tools/build.js",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "测试 · 冒烟（19 项）",
+      "type": "shell",
+      "command": "node tests/smoke.js",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "测试 · 验收（15 项，直连数据库断言）",
+      "type": "shell",
+      "command": "set -a && . backend/.env && set +a && node tests/acceptance.js",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "测试 · 并发防超卖（17 项）",
+      "type": "shell",
+      "command": "set -a && . backend/.env && set +a && node tests/concurrency.js",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "测试 · 前端集成（53 项）",
+      "type": "shell",
+      "command": "cd .uicheck && node ui-check.js",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "测试 · 单文件版界面（51 项）",
+      "detail": "jsdom 驱动单文件版：四角色全页面渲染、菜单权限矩阵、详情弹窗、课表 13 节次",
+      "type": "shell",
+      "command": "cd .uicheck && node static-check.js",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "测试 · 分发包一致性（20 项）",
+      "detail": "校验 选课系统-单文件版.html 与 docs/index.html 字节一致 + 自包含 + 能离线起来",
+      "type": "shell",
+      "command": "cd .uicheck && node dist-check.js",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "测试 · 业务规则引擎（74 项）",
+      "detail": "阶段一单文件版的规则引擎回归，不依赖后端，与数据库版逐条比对",
+      "type": "shell",
+      "command": "node tools/test-engine.js",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "测试 · 全部（249 项）",
+      "detail": "串行跑完七套测试，需要后端已在 3000 运行",
+      "type": "shell",
+      "command": "node tools/test-engine.js && node tests/smoke.js && set -a && . backend/.env && set +a && node tests/acceptance.js && node tests/concurrency.js && (cd .uicheck && node static-check.js) && (cd .uicheck && node dist-check.js) && (cd .uicheck && node ui-check.js)",
+      "options": { "cwd": "${workspaceFolder}", "shell": { "executable": "bash" } },
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
+      "label": "部署到云服务器",
+      "detail": "在 Ubuntu 服务器上执行：装 JDK/Maven/PostgreSQL/Nginx → 打包 → systemd → 反代 → 可选 HTTPS",
+      "type": "shell",
+      "command": "sudo bash deploy.sh --domain <你的域名> --email <你的邮箱>",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    }
+  ]
+}

@@ -95,26 +95,32 @@ course-selection-system/
 ├─ tools/                            # 开发与运维辅助脚本
 │  ├─ pg-setup.sh                    # 本机建库：生成随机口令写 .env → 建角色与库 → 导入 schema
 │  ├─ mysql2pg.py                    # MySQL 种子脚本 → PostgreSQL 种子脚本转换器（记录全部迁移规则）
-│  ├─ run-backend.sh                 # 本地启动后端（加载 .env、显式下发端口）
+│  ├─ run-backend.sh                 # 本地启动后端（加载 .env、显式下发端口；Windows 与 Linux 通用）
+│  ├─ build-backend.sh               # 打包后端（自动定位 java/mvn，走阿里云镜像）
 │  ├─ serve-frontend.js              # 本地前端服务器：托管 frontend/ 并把 /api 转发到后端（只依赖 Node 内置模块）
 │  ├─ maven-settings.xml             # Maven 国内镜像配置（阿里云 public）
-│  └─ build.js / export-data.js / test-engine.js / diag-engine.js   # 阶段一单文件版的构建与自测工具
+│  └─ build.js                       # 构建单文件演示版（产出 选课系统-单文件版.html 与 docs/index.html）
 │
 ├─ legacy/node-backend/              # 【归档】阶段一的 Node.js + Express + MySQL 实现，保留供对照与迁移溯源
 │
 ├─ docs/
-│  ├─ index.html                     # 【阶段一产物】纯静态站点入口（GitHub Pages 即用它）
-│  └─ 课程知识与设计思考.md            # 【报告素材】用到的课程知识、技术选型与踩坑记录
+│  ├─ index.html                     # 单文件版产物，同时作为 GitHub Pages 站点入口
+│  ├─ 课程知识与设计思考.md            # 【报告素材】用到的课程知识、技术选型与踩坑记录
+│  ├─ 作业要求对照表.md                # 【报告素材】作业逐条要求的达标情况与缺口清单
+│  └─ 现场演示操作卡.md                # 【报告素材】下次课现场生成/演示的操作卡
+│
+├─ .vscode/                          # VS Code 工作区：tasks.json 一键跑全流程、launch.json 断点调试
 │
 ├─ deploy.sh                         # 云服务器一键部署（Ubuntu + JDK + PostgreSQL + Nginx + HTTPS）
 ├─ 云服务器部署指南.md                # 部署路线与逐步操作
 ├─ 交付与验收报告.html                # 交付清单与验收结论
-├─ 选课系统-单文件版.html             # 【阶段一交付物】免安装单文件网页，双击即用
+├─ 选课系统-单文件版.html             # 免安装单文件网页，双击即用（无需后端/网络）
 ├─ 启动选课系统.bat                   # Windows 一键启动本地后端（Java）
 │
-├─ .uicheck/                         # 开发期前端集成验证（jsdom），不参与线上运行
-│  ├─ ui-check.js                    # 加载真实页面并对接真实后端：四角色登录 + 逐页渲染 + 交互（53 项）
-│  ├─ static-check.js                # 阶段一单文件版验证：加载构建产物真实执行（51 项）
+├─ .uicheck/                         # 开发期前端验证（jsdom），不参与线上运行
+│  ├─ static-check.js                # 单文件版界面深度覆盖：四角色全页面 + 菜单权限矩阵 + 弹窗（51 项）
+│  ├─ dist-check.js                  # 分发包一致性：两份副本字节一致 + 自包含 + 能离线启动（20 项）
+│  ├─ ui-check.js                    # 前后端分离那一路：真实页面 + 真后端 + 真 PostgreSQL（53 项）
 │  ├─ diag-*.js                      # 课表冲突 / 排课全景等诊断脚本
 │  └─ node_modules/                  # jsdom（已被 .gitignore 排除）
 │
@@ -465,24 +471,47 @@ cd .. && bash tools/run-backend.sh
 node .uicheck/ui-check.js     # 53 项
 ```
 
-### 7.5 阶段一（单文件版）自测工具
+### 7.5 单文件版验证（不依赖后端，可完全离线跑）
+
+三个阶段一做出来的东西到现在仍然可验证——单文件版与数据库版**共用同一套业务规则**，
+所以它既是「现场演示的兜底」，也是规则引擎的独立回归。
 
 ```bash
-node tools/test-engine.js         # 引擎回归测试：74 项，覆盖全部核心业务规则
-node .uicheck/static-check.js     # 端到端验证：加载构建产物真实执行，51 项
+node tools/test-engine.js              # 引擎回归：74 项（核心业务规则，与数据库版逐条一致）
+node .uicheck/static-check.js          # 单文件版界面：51 项（四角色全页面 + 菜单权限矩阵）
+node .uicheck/dist-check.js            # 分发包一致性：20 项（两份副本字节一致 + 自包含 + 能离线启动）
 ```
+
+重新构建单文件版（改过前端后需要）：
+
+```bash
+node tools/build.js    # 产出 选课系统-单文件版.html 与 docs/index.html（GitHub Pages 入口）
+```
+
+> `dist-check.js` 存在的理由是防止**产物漂移**：同一份产物会写成两个文件，
+> 而 `docs/index.html` 是线上站点入口。只要有人只改了其中一个，两边功能测试都还是绿的，
+> 线上却和本地演示不一致——这种问题极难发现，所以直接用字节比对钉死。
 
 ### 7.6 回归总数
 
 在干净数据库上连续执行的实际结果：
 
 ```
-后端  smoke.js          19 项   通过 19   （接口冒烟）
-后端  acceptance.js     15 项   通过 15   （TC-01 ~ TC-15 端到端验收）
-后端  concurrency.js    17 项   通过 17   （并发防超卖 / 幂等 / 候补递补）
-前端  ui-check.js       53 项   通过 53   （四角色逐页渲染 + 交互，零运行时异常）
-                       ─────────────────
-                       104 项   全部通过
+后端    smoke.js          19 项   通过 19   （接口冒烟）
+后端    acceptance.js     15 项   通过 15   （TC-01 ~ TC-15 端到端验收）
+后端    concurrency.js    17 项   通过 17   （并发防超卖 / 幂等 / 候补递补）
+前端    ui-check.js       53 项   通过 53   （四角色逐页渲染 + 交互，零运行时异常）
+单文件  static-check.js   51 项   通过 51   （单文件版界面与权限矩阵）
+单文件  dist-check.js     20 项   通过 20   （两份分发副本一致且自包含）
+引擎    test-engine.js    74 项   通过 74   （业务规则回归，与数据库版一致）
+                         ─────────────────
+                         249 项   全部通过
+```
+
+VS Code 里可直接用任务面板一键跑：
+
+```
+Ctrl+Shift+P → Tasks: Run Task → 测试 · 全部（249 项）
 ```
 
 ## 8. 与设计文档的对应关系

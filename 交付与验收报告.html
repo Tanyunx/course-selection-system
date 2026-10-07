@@ -138,7 +138,7 @@
     <div><b>运行环境</b>Linux（Ubuntu LTS）+ Nginx + systemd</div>
     <div><b>构建</b>Maven 3.9 + JDK 21（LTS）</div>
     <div><b>源码托管</b>GitHub：Tanyunx/course-selection-system</div>
-    <div><b>验收结论</b><span class="badge b-ok">104 项断言全部通过</span></div>
+    <div><b>验收结论</b><span class="badge b-ok">249 项断言全部通过</span></div>
   </div>
 </header>
 
@@ -151,7 +151,7 @@
       <tr><td>数据库</td><td>18 张表、约束/索引/外键、<code>updated_at</code> 触发器、演示数据</td><td><code>backend/src/main/resources/db/</code></td><td><span class="badge b-ok">已完成</span></td></tr>
       <tr><td>前端</td><td>原生 HTML + CSS + ES Module，四端界面，由 Nginx 托管</td><td><code>frontend/</code></td><td><span class="badge b-ok">已完成</span></td></tr>
       <tr><td>阶段一产物</td><td>免安装单文件网页（本地 JSON mock，对应"先用 mock 数据"）</td><td><code>选课系统-单文件版.html</code></td><td><span class="badge b-ok">已完成</span></td></tr>
-      <tr><td>测试</td><td>冒烟 19 + 验收 15 + 并发 17 + 前端集成 53</td><td><code>tests/</code>、<code>.uicheck/</code></td><td><span class="badge b-ok">104/104 通过</span></td></tr>
+      <tr><td>测试</td><td>冒烟 19 + 验收 15 + 并发 17 + 前端集成 53 + 单文件界面 51 + 分发包一致性 20 + 规则引擎 74</td><td><code>tests/</code>、<code>.uicheck/</code>、<code>tools/</code></td><td><span class="badge b-ok">249/249 通过</span></td></tr>
       <tr><td>部署脚本</td><td>Ubuntu 一键部署：JDK + PostgreSQL + systemd + Nginx + HTTPS</td><td><code>deploy.sh</code></td><td><span class="badge b-ok">已完成</span></td></tr>
       <tr><td>文档</td><td>README、云服务器部署指南、课程知识与设计思考</td><td>根目录、<code>docs/</code></td><td><span class="badge b-ok">已完成</span></td></tr>
       <tr><td>上线</td><td>推送到 GitHub、部署到云服务器</td><td>—</td><td><span class="badge b-warn">待用户确认后执行</span></td></tr>
@@ -196,6 +196,21 @@
         <td><code>.uicheck/ui-check.js</code><br />53 项</td>
         <td>jsdom 加载真实页面并对接真实后端，真实执行前端 ES Module：四角色登录、按角色生成菜单、逐页渲染、课程卡片状态标签、课表 13 节与时段列、二次确认、验证码流程，并统计未捕获异常与控制台错误</td>
         <td><span class="badge b-ok">53/53</span></td>
+      </tr>
+      <tr>
+        <td><code>.uicheck/static-check.js</code><br />51 项</td>
+        <td>单文件演示版界面深度覆盖（无需后端）：四角色全页面渲染、菜单路径与权限矩阵比对、详情弹窗开关、课表 13 节次与时段标注、数据重置能力，并断言无未捕获异常与控制台错误</td>
+        <td><span class="badge b-ok">51/51</span></td>
+      </tr>
+      <tr>
+        <td><code>.uicheck/dist-check.js</code><br />20 项</td>
+        <td>分发包一致性：<code>选课系统-单文件版.html</code> 与 <code>docs/index.html</code> 字节级一致、零外部资源引用、无工程内绝对路径、能在无后端无网络下独立启动并完成登录</td>
+        <td><span class="badge b-ok">20/20</span></td>
+      </tr>
+      <tr>
+        <td><code>tools/test-engine.js</code><br />74 项</td>
+        <td>规则引擎回归：候补递补、时间冲突三维判定、学分上下限、先修依赖、批次时间窗与年级准入、角色权限，逐条与数据库版行为比对</td>
+        <td><span class="badge b-ok">74/74</span></td>
       </tr>
     </tbody>
   </table>

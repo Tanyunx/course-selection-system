@@ -16,8 +16,23 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 JAR="$ROOT/backend/target/course-selection-backend.jar"
-JAVA="C:/Program Files/Java/jdk-21/bin/java.exe"
 ENVFILE="$ROOT/backend/.env"
+
+# 定位 java：优先 JAVA_HOME（Linux 服务器上通常已设），
+# 其次 PATH 中的 java，最后回退到 Windows 常见安装路径。
+# 这样同一份脚本在 Windows 开发机与 Ubuntu 学生机上都能直接跑。
+if [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ]; then
+  JAVA="$JAVA_HOME/bin/java"
+elif [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java.exe" ]; then
+  JAVA="$JAVA_HOME/bin/java.exe"
+elif command -v java >/dev/null 2>&1; then
+  JAVA="java"
+elif [ -x "C:/Program Files/Java/jdk-21/bin/java.exe" ]; then
+  JAVA="C:/Program Files/Java/jdk-21/bin/java.exe"
+else
+  echo "找不到 java。请安装 JDK 21，或设置 JAVA_HOME 后重试。" >&2
+  exit 1
+fi
 
 if [ ! -f "$JAR" ]; then
   echo "未找到 $JAR，请先在 backend/ 目录执行："

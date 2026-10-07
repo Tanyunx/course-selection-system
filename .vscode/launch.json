@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "调试后端（Spring Boot）",
+      "request": "launch",
+      "mainClass": "com.campus.course.CourseSelectionApplication",
+      "projectName": "course-selection-backend",
+      "envFile": "${workspaceFolder}/backend/.env",
+      "args": [
+        "--server.address=127.0.0.1",
+        "--server.port=3000"
+      ],
+      "console": "internalConsole",
+      "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
+      "type": "java",
+      "name": "调试后端 · 重建演示库",
+      "request": "launch",
+      "mainClass": "com.campus.course.CourseSelectionApplication",
+      "projectName": "course-selection-backend",
+      "envFile": "${workspaceFolder}/backend/.env",
+      "args": [
+        "--server.address=127.0.0.1",
+        "--server.port=3000",
+        "--app.db.init-on-startup=true"
+      ],
+      "console": "internalConsole"
+    },
+    {
+      "type": "chrome",
+      "name": "调试前端（已启动 5500）",
+      "request": "launch",
+      "url": "http://127.0.0.1:5500",
+      "webRoot": "${workspaceFolder}/frontend"
+    }
+  ]
+}

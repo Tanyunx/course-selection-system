@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM, VirtualConsole } = require('jsdom');
 
-const ENGINE = require('../web-build/mock/index.js');
+const ENGINE = require('../frontend/mock/index.js');
 const HTML_PATH = path.join(__dirname, '..', '选课系统-单文件版.html');
 const OUT = path.join(__dirname, 'preview-timetable.html');
 

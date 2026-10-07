@@ -5,7 +5,8 @@
  * 用于在编写回归测试前确认数据基线。
  */
 
-const E = require('./mock/index.js');
+// 目录结构重构后 mock 数据层由 web-build/mock/ 迁到 frontend/mock/
+const E = require('../frontend/mock/index.js');
 
 const q = (m, p, query, body, tk) => E.handle(m, p, query || {}, body || {}, tk || null);
 
