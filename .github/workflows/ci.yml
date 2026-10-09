@@ -1,0 +1,168 @@
+name: CI
+
+# 触发时机：推送到 main、对 main 发起 PR 时都跑一遍
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:      # 也支持在 Actions 页面手动触发
+
+# 同一分支的新推送会取消上一次未跑完的任务，省额度
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ------------------------------------------------------------------
+  # 任务一：Java 单元测试（不依赖数据库，纯逻辑，最快）
+  # ------------------------------------------------------------------
+  java-unit:
+    name: Java 单元测试（JUnit 5）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+
+      - name: 执行 mvn test
+        working-directory: backend
+        run: mvn -B -ntp test
+
+      - name: 上传测试报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: backend/target/surefire-reports/
+          if-no-files-found: ignore
+
+  # ------------------------------------------------------------------
+  # 任务二：全链路回归（起 PostgreSQL，构建后端，跑 Node 黑盒测试）
+  # ------------------------------------------------------------------
+  regression:
+    name: 全链路回归（冒烟 + 验收 + 并发）
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: course_selection
+        ports:
+          - 5432:5432
+        # 等数据库真正可连再继续，避免竞态导致的假失败
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # 以下口令 / 密钥仅用于 CI 里的一次性容器，与任何真实环境无关。
+      # 后端连接 CI 里的 PostgreSQL（账号用超级用户，简化建表权限问题）
+      DB_HOST: 127.0.0.1
+      DB_PORT: '5432'
+      DB_NAME: course_selection
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      AUTH_SECRET: ci-only-secret-not-used-in-production
+      # 演示账号口令：优先取仓库 secret，未配置时回退到种子里公开的演示口令。
+      # 这样 fork 本仓库的人无需任何配置也能跑通；真实部署的口令绝不走这里。
+      CI_DEMO_PASSWORD: ${{ secrets.CI_DEMO_PASSWORD }}
+      # 后端只监听本机，测试脚本通过 127.0.0.1:3000 访问
+      SERVER_PORT: '3000'
+      SERVER_ADDRESS: 127.0.0.1
+      # 测试脚本连接同一个库直接校验数据
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGDATABASE: course_selection
+      PGUSER: postgres
+      PGPASSWORD: postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+
+      - name: 安装 Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 安装测试依赖
+        working-directory: tests
+        run: npm ci --no-audit --no-fund
+
+      - name: 导入数据库结构与种子数据
+        working-directory: backend/src/main/resources/db
+        run: |
+          psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+            -v ON_ERROR_STOP=1 -q -f schema-pg.sql
+          # seed 里的口令占位符要替换成真实 BCrypt 哈希。
+          # 演示口令取自 CI secret（该库是一次性容器，与任何真实环境无关）；
+          # 若未配置 secret 则回退到种子注释里公开的演示口令，保证 fork 后也能跑通。
+          # bcryptjs 装在 tests/node_modules，这里用 NODE_PATH 指过去。
+          # 注意：生成的 seed-ready.sql 含真实哈希，用完立即删除，且已被 .gitignore 排除。
+          NODE_PATH="$(pwd)/../../../tests/node_modules" node -e "
+            const fs = require('fs');
+            const bcrypt = require('bcryptjs');
+            const pwd = process.env.CI_DEMO_PASSWORD || '123456';
+            const hash = bcrypt.hashSync(pwd, 10);
+            const sql = fs.readFileSync('seed-pg.sql', 'utf8').split('__PWD_HASH__').join(hash);
+            fs.writeFileSync('seed-ready.sql', sql);
+            console.log('已替换口令占位符');
+          "
+          psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+            -v ON_ERROR_STOP=1 -q -f seed-ready.sql
+          # 无论导入成功与否都清掉含哈希的中间文件
+          rm -f seed-ready.sql
+
+      - name: 构建后端 jar
+        working-directory: backend
+        run: mvn -B -ntp -DskipTests package
+
+      - name: 启动后端并等待就绪
+        run: |
+          cd backend
+          nohup java -jar target/course-selection-backend.jar \
+            --server.port=3000 --server.address=127.0.0.1 \
+            > /tmp/backend.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
+              echo "后端已就绪（第 ${i} 次探测）"
+              curl -s http://127.0.0.1:3000/api/health
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "后端启动超时，日志如下："
+          cat /tmp/backend.log
+          exit 1
+
+      - name: 冒烟测试
+        working-directory: tests
+        run: node smoke.js
+
+      - name: 验收测试
+        working-directory: tests
+        run: node acceptance.js
+
+      - name: 并发测试
+        working-directory: tests
+        run: node concurrency.js
+
+      - name: 失败时输出后端日志
+        if: failure()
+        run: cat /tmp/backend.log

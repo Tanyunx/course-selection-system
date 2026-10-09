@@ -34,8 +34,12 @@ if command -v mvn >/dev/null 2>&1; then
   MVN="mvn"
 elif [ -x "$HOME/.workbuddy/binaries/maven/apache-maven-3.9.16/bin/mvn" ]; then
   MVN="$HOME/.workbuddy/binaries/maven/apache-maven-3.9.16/bin/mvn"
-elif [ -x "/c/Users/TAN30/.workbuddy/binaries/maven/apache-maven-3.9.16/bin/mvn" ]; then
-  MVN="/c/Users/TAN30/.workbuddy/binaries/maven/apache-maven-3.9.16/bin/mvn"
+elif [ -x "/opt/homebrew/bin/mvn" ]; then
+  MVN="/opt/homebrew/bin/mvn"      # macOS Apple Silicon
+elif [ -x "/usr/local/bin/mvn" ]; then
+  MVN="/usr/local/bin/mvn"         # macOS Intel / 手工安装
+elif [ -x "/usr/share/maven/bin/mvn" ]; then
+  MVN="/usr/share/maven/bin/mvn"   # Linux 发行版包
 elif [ -x "$ROOT/backend/mvnw" ]; then
   MVN="$ROOT/backend/mvnw"          # Maven Wrapper：无需预装 Maven
 else

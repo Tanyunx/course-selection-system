@@ -138,7 +138,7 @@
     <div><b>运行环境</b>Linux（Ubuntu LTS）+ Nginx + systemd</div>
     <div><b>构建</b>Maven 3.9 + JDK 21（LTS）</div>
     <div><b>源码托管</b>GitHub：Tanyunx/course-selection-system</div>
-    <div><b>验收结论</b><span class="badge b-ok">249 项断言全部通过</span></div>
+    <div><b>验收结论</b><span class="badge b-ok">339 项断言全部通过</span></div>
   </div>
 </header>
 
@@ -151,7 +151,9 @@
       <tr><td>数据库</td><td>18 张表、约束/索引/外键、<code>updated_at</code> 触发器、演示数据</td><td><code>backend/src/main/resources/db/</code></td><td><span class="badge b-ok">已完成</span></td></tr>
       <tr><td>前端</td><td>原生 HTML + CSS + ES Module，四端界面，由 Nginx 托管</td><td><code>frontend/</code></td><td><span class="badge b-ok">已完成</span></td></tr>
       <tr><td>阶段一产物</td><td>免安装单文件网页（本地 JSON mock，对应"先用 mock 数据"）</td><td><code>选课系统-单文件版.html</code></td><td><span class="badge b-ok">已完成</span></td></tr>
-      <tr><td>测试</td><td>冒烟 19 + 验收 15 + 并发 17 + 前端集成 53 + 单文件界面 51 + 分发包一致性 20 + 规则引擎 74</td><td><code>tests/</code>、<code>.uicheck/</code>、<code>tools/</code></td><td><span class="badge b-ok">249/249 通过</span></td></tr>
+      <tr><td>测试</td><td>Java 单元测试 78 + 冒烟 19 + 验收 15 + 并发 17 + 前端集成 65 + 单文件界面 51 + 分发包一致性 20 + 规则引擎 74</td><td><code>backend/src/test/</code>、<code>tests/</code>、<code>.uicheck/</code>、<code>tools/</code></td><td><span class="badge b-ok">339/339 通过</span></td></tr>
+      <tr><td>运维脚本</td><td>数据库备份 / 恢复（<code>backup-db.sh</code> / <code>restore-db.sh</code>），恢复前自动备份 + 二次确认</td><td><code>tools/</code></td><td><span class="badge b-ok">已完成</span></td></tr>
+      <tr><td>持续集成</td><td>GitHub Actions：Java 单测 + 全链路回归（含 PostgreSQL service 容器）</td><td><code>.github/workflows/ci.yml</code></td><td><span class="badge b-ok">已完成</span></td></tr>
       <tr><td>部署脚本</td><td>Ubuntu 一键部署：JDK + PostgreSQL + systemd + Nginx + HTTPS</td><td><code>deploy.sh</code></td><td><span class="badge b-ok">已完成</span></td></tr>
       <tr><td>文档</td><td>README、云服务器部署指南、课程知识与设计思考</td><td>根目录、<code>docs/</code></td><td><span class="badge b-ok">已完成</span></td></tr>
       <tr><td>上线</td><td>推送到 GitHub、部署到云服务器</td><td>—</td><td><span class="badge b-warn">待用户确认后执行</span></td></tr>
@@ -163,10 +165,14 @@
   <h2>二、验收结论</h2>
 
   <div class="kpis">
+    <div class="kpi"><div class="n">78/78</div><div class="l">Java 单元测试（JUnit 5）</div></div>
     <div class="kpi"><div class="n">19/19</div><div class="l">接口冒烟测试</div></div>
     <div class="kpi"><div class="n">15/15</div><div class="l">端到端验收（TC-01~15）</div></div>
     <div class="kpi"><div class="n">17/17</div><div class="l">并发 / 幂等 / 递补</div></div>
-    <div class="kpi"><div class="n">53/53</div><div class="l">前端集成（jsdom）</div></div>
+    <div class="kpi"><div class="n">65/65</div><div class="l">前端集成（jsdom）</div></div>
+    <div class="kpi"><div class="n">51/51</div><div class="l">单文件界面</div></div>
+    <div class="kpi"><div class="n">20/20</div><div class="l">分发包一致性</div></div>
+    <div class="kpi"><div class="n">74/74</div><div class="l">规则引擎回归</div></div>
   </div>
 
   <div class="note">
@@ -177,6 +183,11 @@
   <table>
     <thead><tr><th>测试套件</th><th>覆盖内容</th><th>结果</th></tr></thead>
     <tbody>
+      <tr>
+        <td><code>backend/src/test/</code><br />78 项</td>
+        <td>JUnit 5 单元测试，<b>不启容器、不连库</b>：错误码分段与业务码 2001~2014 连续无空洞；<code>Db.prepare</code> 的 <code>IN (?)</code> 集合展开与占位符数量校验；死锁重试判定（<code>40P01</code> / <code>40001</code> 可重试，唯一键冲突等不可重试）；热度分档边界值；冲突与单双周文案；限速软/硬阈值与幂等缓存命中</td>
+        <td><span class="badge b-ok">78/78</span></td>
+      </tr>
       <tr>
         <td><code>tests/smoke.js</code><br />19 项</td>
         <td>健康检查、未登录拦截、四角色登录、当前学期、课程列表与筛选、我的已选、课表、候补、通知、教师开课、教务概览与开课计划、选课批次、用户管理、运行监控、审计日志、两类越权拦截</td>
@@ -193,9 +204,9 @@
         <td><span class="badge b-ok">17/17</span></td>
       </tr>
       <tr>
-        <td><code>.uicheck/ui-check.js</code><br />53 项</td>
-        <td>jsdom 加载真实页面并对接真实后端，真实执行前端 ES Module：四角色登录、按角色生成菜单、逐页渲染、课程卡片状态标签、课表 13 节与时段列、二次确认、验证码流程，并统计未捕获异常与控制台错误</td>
-        <td><span class="badge b-ok">53/53</span></td>
+        <td><code>.uicheck/ui-check.js</code><br />65 项</td>
+        <td>jsdom 加载真实页面并对接真实后端，真实执行前端 ES Module：四角色登录、按角色生成菜单、逐页渲染、课程卡片状态标签、课表 13 节与时段列、二次确认、验证码流程；<b>课表导出（CSV / ICS）内容级校验</b>——CSV 表头与周视图、UTF-8 BOM 字节、ICS 的 <code>VCALENDAR</code>/<code>VEVENT</code>/<code>RRULE</code>/<code>VALARM</code> 与时区；并统计未捕获异常与控制台错误</td>
+        <td><span class="badge b-ok">65/65</span></td>
       </tr>
       <tr>
         <td><code>.uicheck/static-check.js</code><br />51 项</td>
@@ -213,6 +224,12 @@
         <td><span class="badge b-ok">74/74</span></td>
       </tr>
     </tbody>
+    <tfoot>
+      <tr>
+        <th colspan="2">八套合计（78 + 19 + 15 + 17 + 65 + 51 + 20 + 74）</th>
+        <th><span class="badge b-ok">339 / 339 全部通过</span></th>
+      </tr>
+    </tfoot>
   </table>
 </section>
 

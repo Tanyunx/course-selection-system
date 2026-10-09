@@ -1,12 +1,18 @@
 package com.campus.course.db;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Supplier;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.ConcurrencyFailureException;
+import org.springframework.dao.DeadlockLoserDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -31,9 +37,13 @@ import org.springframework.transaction.support.TransactionTemplate;
  * 同一个线程内的 JdbcTemplate 会自动加入当前事务，因此业务代码不再需要像
  * Node 版那样显式传递 {@code conn}，也就不会出现"事务里再去连接池取连接"导致的
  * 连接池耗尽死锁（原 Node 版用 {@code runner(conn)} 规避的正是这个问题）。
+ * 另外带有针对 PostgreSQL 死锁（{@code 40P01}）的有限次自动重试，
+ * 详见 {@link #withTransaction(Supplier)} 的说明。
  */
 @Repository
 public class Db {
+
+    private static final Logger log = LoggerFactory.getLogger(Db.class);
 
     private final JdbcTemplate jdbc;
     private final TransactionTemplate tx;
@@ -100,14 +110,94 @@ public class Db {
     /**
      * 在事务中执行，回调返回什么就返回什么；抛异常则整体回滚。
      * 用于选课的"占名额 + 校验 + 落库"、换课的"先占后放"等需要原子性的场景。
+     *
+     * <p><b>死锁自动重试</b>：并发事务互相等待对方的行锁时，PostgreSQL 会主动终止其中一方
+     * 并抛出 {@code 40P01}（deadlock detected）。最典型的场景是两名学生同时互换课程
+     * （A→B 与 B→A）：双方都先锁住自己的原选课记录，形成循环等待。
+     * <p>这类失败不是业务错误——它在语义上等价于"这次没抢到锁，重来一次就成功了"。
+     * 因此这里对 {@code 40P01}（死锁）与 {@code 40001}（序列化失败）做有限次重试，
+     * 让调用方（以及学生）不必感知这种瞬时冲突。
+     *
+     * <p>重试的安全性由事务本身保证：失败的事务已经完整回滚，
+     * 已占用的名额、已写的记录都回到调用前状态，重新执行不会产生副作用叠加。
      */
     public <T> T withTransaction(Supplier<T> handler) {
-        return tx.execute(status -> handler.get());
+        int attempt = 0;
+        while (true) {
+            attempt++;
+            try {
+                return tx.execute(status -> handler.get());
+            } catch (RuntimeException e) {
+                if (attempt >= MAX_TX_ATTEMPTS || !isRetryableConflict(e)) {
+                    throw e;
+                }
+                long wait = RETRY_BASE_MILLIS * attempt
+                        + ThreadLocalRandom.current().nextLong(RETRY_BASE_MILLIS);
+                log.warn("事务遇到并发冲突（{}），{} 毫秒后重试第 {}/{} 次：{}",
+                        e.getClass().getSimpleName(), wait, attempt, MAX_TX_ATTEMPTS - 1,
+                        rootMessage(e));
+                sleepQuietly(wait);
+            }
+        }
+    }
+
+    /** 事务重试上限（含首次执行）。1 次重试在小规模场景下已足够，避免放大数据库压力。 */
+    static final int MAX_TX_ATTEMPTS = 3;
+
+    /** 重试基础退避时间（毫秒），实际等待为 base×attempt + 随机抖动，防止重试再次相撞。 */
+    static final long RETRY_BASE_MILLIS = 20L;
+
+    /**
+     * 判断异常是否为"可重试的并发冲突"。
+     *
+     * <p>两条识别路径都保留：Spring 已经把 PostgreSQL 的 SQLState 翻译成了标准异常类型
+     * （{@link DeadlockLoserDataAccessException} / {@link ConcurrencyFailureException}），
+     * 但异常也可能被业务代码包装过，所以再沿 cause 链找一次 {@link SQLException} 的 SQLState。
+     */
+    static boolean isRetryableConflict(Throwable e) {
+        if (e instanceof DeadlockLoserDataAccessException) {
+            return true;
+        }
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof ConcurrencyFailureException) {
+                return true;
+            }
+            if (t instanceof SQLException se) {
+                String state = se.getSQLState();
+                if ("40P01".equals(state) || "40001".equals(state)) {
+                    return true;
+                }
+            }
+            if (t.getCause() == t) {
+                break;
+            }
+        }
+        return false;
+    }
+
+    private static String rootMessage(Throwable e) {
+        Throwable t = e;
+        while (t.getCause() != null && t.getCause() != t) {
+            t = t.getCause();
+        }
+        String msg = t.getMessage();
+        return msg == null ? t.getClass().getSimpleName() : msg.replace('\n', ' ');
+    }
+
+    private static void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /** 无返回值的写法，便于在事务里直接调用 void 型业务方法。 */
     public void inTransaction(Runnable handler) {
-        tx.executeWithoutResult(status -> handler.run());
+        withTransaction(() -> {
+            handler.run();
+            return null;
+        });
     }
 
     /* ------------------------------------------------------------------ */

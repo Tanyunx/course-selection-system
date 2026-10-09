@@ -61,28 +61,38 @@ course-selection-system/
 ├─ backend/                          # 【后端】Java Web（Spring Boot 3），独立部署单元
 │  ├─ pom.xml                        # Maven 依赖与构建（finalName = course-selection-backend）
 │  ├─ .env.example                   # 环境变量模板（真实口令只放 .env，已被 .gitignore 排除）
-│  └─ src/main/
-│     ├─ java/com/campus/course/
-│     │  ├─ CourseSelectionApplication.java   # 启动类
-│     │  ├─ common/                  # ApiResponse / Api / ErrorCode / BizException / 全局异常处理
-│     │  ├─ config/                  # AppProperties（配置绑定）/ JacksonConfig（时间格式）/ WebConfig（CORS + 拦截器）
-│     │  ├─ db/Db.java               # 数据访问层统一入口：query / update / insertReturningId / withTransaction
-│     │  ├─ security/                # TokenService（HMAC 令牌）/ SessionStore / AuthInterceptor / @RequireRole
-│     │  ├─ service/                 # 业务层：选课规则、课程、选课、候补、通知、审计、幂等与限速守卫
-│     │  ├─ store/                   # 会话、幂等缓存、限速桶、运行指标
-│     │  ├─ util/Period.java         # 全校统一课时表（13 节）与时段合法性校验
-│     │  ├─ init/                    # DbInitializer（建表导数据）/ ScheduledTasks（候补超时回收、缓存清理）
-│     │  └─ web/                     # 9 个 Controller：auth / courses / enrollments / waitlist / notices / teacher / admin / sys / health
-│     └─ resources/
-│        ├─ application.yml          # 配置（全部支持环境变量覆盖）
-│        └─ db/
-│           ├─ schema-pg.sql         # 【PostgreSQL】建表：18 张表 + 唯一约束 + 索引 + 外键 + updated_at 触发器
-│           └─ seed-pg.sql           # 种子数据（学期、用户、课程、开课、排课、批次、规则）
+│  ├─ src/main/
+│  │  ├─ java/com/campus/course/
+│  │  │  ├─ CourseSelectionApplication.java   # 启动类
+│  │  │  ├─ common/                  # ApiResponse / Api / ErrorCode / BizException / 全局异常处理
+│  │  │  ├─ config/                  # AppProperties（配置绑定）/ JacksonConfig（时间格式）/ WebConfig（CORS + 拦截器）
+│  │  │  ├─ db/Db.java               # 数据访问层统一入口：query / update / insertReturningId / withTransaction
+│  │  │  ├─ security/                # TokenService（HMAC 令牌）/ SessionStore / AuthInterceptor / @RequireRole
+│  │  │  ├─ service/                 # 业务层：选课规则、课程、选课、候补、通知、审计、幂等与限速守卫
+│  │  │  ├─ store/                   # 会话、幂等缓存、限速桶、运行指标
+│  │  │  ├─ util/Period.java         # 全校统一课时表（13 节）与时段合法性校验
+│  │  │  ├─ init/                    # DbInitializer（建表导数据）/ ScheduledTasks（候补超时回收、缓存清理）
+│  │  │  └─ web/                     # 9 个 Controller：auth / courses / enrollments / waitlist / notices / teacher / admin / sys / health
+│  │  └─ resources/
+│  │     ├─ application.yml          # 配置（全部支持环境变量覆盖）
+│  │     └─ db/
+│  │        ├─ schema-pg.sql         # 【PostgreSQL】建表：18 张表 + 唯一约束 + 索引 + 外键 + updated_at 触发器
+│  │        └─ seed-pg.sql           # 种子数据（学期、用户、课程、开课、排课、批次、规则）
+│  │
+│  └─ src/test/java/com/campus/course/  # 【Java 单元测试】JUnit 5，不启容器、不连库（78 项，见 §7.6）
+│     ├─ common/ErrorCodeTest.java   # 6 项：错误码分段、业务码 2001~2014 连续无空洞、未知码回退
+│     ├─ db/DbPrepareTest.java       # 16 项：IN (?) 集合展开、空集合、占位符与参数数量校验
+│     ├─ db/DbRetryTest.java         # 10 项：40P01 / 40001 可重试，唯一键冲突等不可重试，cause 链自引用不死循环
+│     ├─ service/RuleServiceTest.java    # 22 项：热度分档边界、占位符、时间与金额格式化
+│     ├─ service/ConflictTextTest.java   # 8 项：冲突提示文案格式
+│     ├─ service/ScheduleTextTest.java   # 4 项：星期与单双周文案
+│     └─ store/StoreTest.java        # 12 项：限速软/硬阈值、验证码豁免、幂等缓存命中与跨用户隔离
 │
 ├─ frontend/                         # 【前端】原生 HTML + CSS + ES Module，由 Nginx 直接托管
 │  ├─ index.html
 │  ├─ css/app.css
-│  ├─ js/{api,ui,app,scheduleEditor}.js
+│  ├─ js/{api,ui,app,scheduleEditor,exportSchedule}.js
+│  │                                 #   exportSchedule.js：课表导出（CSV 带 UTF-8 BOM / ICS 符合 RFC 5545）
 │  ├─ js/views/{student,teacher,admin,sys}.js   # 四端界面
 │  └─ mock/                          # 阶段一：本地 JSON mock 数据层（浏览器内跑通全流程，不依赖后端）
 │
@@ -95,11 +105,15 @@ course-selection-system/
 ├─ tools/                            # 开发与运维辅助脚本
 │  ├─ pg-setup.sh                    # 本机建库：生成随机口令写 .env → 建角色与库 → 导入 schema
 │  ├─ mysql2pg.py                    # MySQL 种子脚本 → PostgreSQL 种子脚本转换器（记录全部迁移规则）
-│  ├─ run-backend.sh                 # 本地启动后端（加载 .env、显式下发端口；Windows 与 Linux 通用）
+│  ├─ run-backend.sh                 # 本地启动后端（加载 .env、显式下发端口、启动前端口占用预检）
 │  ├─ build-backend.sh               # 打包后端（自动定位 java/mvn，走阿里云镜像）
 │  ├─ serve-frontend.js              # 本地前端服务器：托管 frontend/ 并把 /api 转发到后端（只依赖 Node 内置模块）
+│  ├─ backup-db.sh                   # 数据库备份：pg_dump 自定义格式 + 纯文本 SQL，按份数滚动保留（见 §7.8）
+│  ├─ restore-db.sh                  # 数据库恢复：自动识别 .dump / .sql，恢复前默认自动备份，需二次确认
 │  ├─ maven-settings.xml             # Maven 国内镜像配置（阿里云 public）
 │  └─ build.js                       # 构建单文件演示版（产出 选课系统-单文件版.html 与 docs/index.html）
+│
+├─ .github/workflows/ci.yml          # 【持续集成】推送到 GitHub 自动跑：Java 单测 + 全链路回归（见 §7.9）
 │
 ├─ legacy/node-backend/              # 【归档】阶段一的 Node.js + Express + MySQL 实现，保留供对照与迁移溯源
 │
@@ -120,7 +134,7 @@ course-selection-system/
 ├─ .uicheck/                         # 开发期前端验证（jsdom），不参与线上运行
 │  ├─ static-check.js                # 单文件版界面深度覆盖：四角色全页面 + 菜单权限矩阵 + 弹窗（51 项）
 │  ├─ dist-check.js                  # 分发包一致性：两份副本字节一致 + 自包含 + 能离线启动（20 项）
-│  ├─ ui-check.js                    # 前后端分离那一路：真实页面 + 真后端 + 真 PostgreSQL（53 项）
+│  ├─ ui-check.js                    # 前后端分离那一路：真实页面 + 真后端 + 真 PostgreSQL（65 项，含课表导出内容级校验）
 │  ├─ diag-*.js                      # 课表冲突 / 排课全景等诊断脚本
 │  └─ node_modules/                  # jsdom（已被 .gitignore 排除）
 │
@@ -320,6 +334,7 @@ cd frontend && python -m http.server 5500
 | --- | --- |
 | **防超卖（并发核心）** | `EnrollmentService.occupySeat`：`UPDATE t_course_offering SET enrolled = enrolled + 1 WHERE id = ? AND enrolled < capacity AND status <> 0`。把"判断是否还有名额"和"名额自增"压缩进**同一条 SQL**，由 PostgreSQL 的行锁保证原子性；受影响行数为 0 即视为已满（2001）。配合 `uk_student_offering` 唯一约束形成最后防线。**不依赖任何应用层锁，也不依赖 Redis。** |
 | 时间冲突检测 | `RuleService.detectConflict`：星期相同 + 节次区间相交 + 单双周不互斥，纯 SQL 一次比对全部排课时段；一门课任一时段冲突即整体冲突 |
+| **热度口径** | `RuleService.heatOf`：**热度 = 该开课的「利用率」分档**（利用率 = 已选人数 ÷ 容量）。**≥ 90% 为「高」，60% ~ 90% 为「中」，< 60% 为「低」**。它衡量的是"这门课的名额被抢到什么程度"，**不是课程评分、不是点击量/浏览量**，是一个由数据库实时算出的派生指标，会随退课、扩容动态变化。用于选课中心卡片与开课详情的热度标签，以及"按热度排序" |
 | 校验顺序 | 鉴权 → 幂等 → 批次(2005) → 重复(2006/2007) → 占名额(2001) → 冲突(2002) → 学分(2003) → 先修(2004) → 落库；第 6~8 步失败整个事务回滚，已占名额自动归还 |
 | 退课 | 截止时间校验(2008) → 记录置为已退 → 释放名额 → 写审计与通知 → 触发候补递补 |
 | 换课 | 单一事务：预占目标名额 → 冲突/学分/先修校验（冲突校验排除即将释放的原课程）→ 释放原名额 → 重建记录；任一步失败返回 2009 且原课程不变 |
@@ -451,7 +466,7 @@ node tests/concurrency.js    # 17 项
 其中并发场景 ① 的一次真实请求码序列：`2001,0,0,0,2001,2001,2001,0,2001` ——
 8 个请求里恰好 3 个 `code=0`，其余都是"已满"，`enrolled` 最终为 3。
 
-### 7.4 前端集成验证（53 项，jsdom 真实执行前端模块）
+### 7.4 前端集成验证（65 项，jsdom 真实执行前端模块）
 
 后端接口对了不等于页面能用——字段名对不上、模块路径断了、运行时抛异常，接口测试都发现不了。
 `.uicheck/ui-check.js` 用 jsdom 加载真实的 `frontend/index.html`，
@@ -461,6 +476,8 @@ node tests/concurrency.js    # 17 项
 - 每个角色逐页渲染无报错，并统计渲染内容长度（防止"渲染了个空壳"）
 - 选课中心课程卡片与状态标签（可选 / 已满 / 时间冲突 / 已选 / 候补中 / 热度）
 - 我的课表周视图、全天 13 节、时段列、晚上时段、勾选后压缩为有课节次
+- **课表导出 CSV / ICS**：拦截 `createObjectURL` 拿到 Blob，做内容级断言
+  （CSV 表头与周视图、首字节 `EF BB BF`；ICS 的 `VCALENDAR` / `VEVENT` / `RRULE` / `VALARM` / 时区）
 - 选课规则页课时表、开课详情弹窗、破坏性操作的二次确认
 - 连续登录失败后出现验证码并可作答通过
 - **统计未捕获异常与控制台错误，必须为 0**
@@ -468,8 +485,14 @@ node tests/concurrency.js    # 17 项
 ```bash
 cd .uicheck && npm install    # 仅首次，安装 jsdom
 cd .. && bash tools/run-backend.sh
-node .uicheck/ui-check.js     # 53 项
+node .uicheck/ui-check.js     # 65 项
 ```
+
+> 两处环境适配值得记一下：jsdom **没有实现 `URL.createObjectURL`**，且 `blob.text()`
+> 解码时会**剥掉前导 BOM**。前者让导出函数直接抛错，后者会让 BOM 断言永远失败。
+> 前者在测试里补了 polyfill；后者改用 `arrayBuffer()` 读原始字节来判断——
+> 若只看 `text().charCodeAt(0)`，会把"功能正常"误判成"缺陷"。
+
 
 ### 7.5 单文件版验证（不依赖后端，可完全离线跑）
 
@@ -492,27 +515,104 @@ node tools/build.js    # 产出 选课系统-单文件版.html 与 docs/index.ht
 > 而 `docs/index.html` 是线上站点入口。只要有人只改了其中一个，两边功能测试都还是绿的，
 > 线上却和本地演示不一致——这种问题极难发现，所以直接用字节比对钉死。
 
-### 7.6 回归总数
+### 7.6 Java 单元测试（78 项，JUnit 5）
+
+前三套测试都是**黑盒**的——只走 HTTP，验证"整体行为对不对"。
+但有些逻辑的边界值藏在函数内部（比如热度分档恰好 90%、占位符与参数数量不匹配、
+限速的软/硬阈值），黑盒测试很难穷举，写错了也可能一直不被发现。所以补上白盒单测：
+
+```bash
+cd backend && ./mvnw -B -ntp test -s ../tools/maven-settings.xml
+```
+
+| 测试类 | 项数 | 覆盖 |
+| --- | --- | --- |
+| `RuleServiceTest` | 22 | 热度分档（0.9 / 0.6 / 容量 0 / 负数）、占位符生成、`plain` 去尾零、时间转换、payload 构造 |
+| `ConflictTextTest` | 8 | 冲突文案格式、多条拼接、空列表、星期越界回退 |
+| `ScheduleTextTest` | 4 | 星期与单双周映射、越界回退 |
+| `ErrorCodeTest` | 6 | 错误码分段约定、业务码 2001~2014 无空洞、每个码都有非空文案 |
+| `DbPrepareTest` | 16 | `IN (?)` 集合展开、空集合→`IN (NULL)`、**占位符与参数数量不匹配必须抛异常**（历史事故：旧实现静默补 null）、取值助手容错 |
+| `DbRetryTest` | 10 | 死锁重试判定：`40P01`/`40001` 与 Spring 异常类型可重试，唯一键冲突与其他错误不可重试，自引用 cause 不死循环 |
+| `StoreTest` | 12 | 限速软/硬阈值、验证码免除、按用户隔离、`reset`；幂等命中/保存、空 requestId、跨用户不串号、失败结果也缓存 |
+
+这些测试**不启动 Spring 容器、不连数据库**，全部是纯逻辑，跑完只要几秒。
+
+### 7.7 回归总数
 
 在干净数据库上连续执行的实际结果：
 
 ```
+Java    mvn test          78 项   通过 78   （单元测试：边界值 + 死锁重试判定）
 后端    smoke.js          19 项   通过 19   （接口冒烟）
 后端    acceptance.js     15 项   通过 15   （TC-01 ~ TC-15 端到端验收）
 后端    concurrency.js    17 项   通过 17   （并发防超卖 / 幂等 / 候补递补）
-前端    ui-check.js       53 项   通过 53   （四角色逐页渲染 + 交互，零运行时异常）
+前端    ui-check.js       65 项   通过 65   （四角色逐页渲染 + 交互 + 课表导出，零运行时异常）
 单文件  static-check.js   51 项   通过 51   （单文件版界面与权限矩阵）
 单文件  dist-check.js     20 项   通过 20   （两份分发副本一致且自包含）
 引擎    test-engine.js    74 项   通过 74   （业务规则回归，与数据库版一致）
                          ─────────────────
-                         249 项   全部通过
+                         339 项   全部通过
 ```
 
 VS Code 里可直接用任务面板一键跑：
 
 ```
-Ctrl+Shift+P → Tasks: Run Task → 测试 · 全部（249 项）
+Ctrl+Shift+P → Tasks: Run Task → 测试 · 全部（327 项）
 ```
+
+> 任务面板里的 327 项不含 Java 单测（它需要 Maven，与其余七套的运行前提不同），
+> 而是单独提供「测试 · Java 单元测试（78 项）」一项；两者相加即上表的 339 项（19+15+17+65+51+20+74=261，加 78 = 339）。
+
+### 7.8 数据库备份与恢复
+
+服务器上已经有真实数据，但此前**没有任何备份手段**。现在补上两个脚本：
+
+```bash
+bash tools/backup-db.sh                      # 备份到 backups/，保留最近 10 份
+bash tools/backup-db.sh --keep 30 --tag demo # 保留 30 份并打标记
+bash tools/restore-db.sh backups/xxx.dump    # 恢复（会二次确认）
+bash tools/restore-db.sh backups/xxx.dump --dry-run   # 只检查不写库
+```
+
+设计上的几个考虑：
+
+- 连接信息从 `backend/.env` 读取，**口令不进命令行**（否则会出现在进程列表里）；
+- 备份为 `pg_dump -Fc` 自定义格式，支持压缩与选择性恢复，同时另存一份纯文本 `.sql` 便于人工查看；
+- 清理只针对本脚本命名规则的文件（`<库名>-<时间戳>*.dump`），不会误删别人的文件；
+- 恢复是「先 `DROP SCHEMA` 再导入」的干净还原，**默认开启提前自动备份**，出问题可回退；
+- 实测过完整闭环：备份 18 表 / 14 用户 → 恢复 → 校验表数与记录数一致。
+
+**脚本怎么找到 `pg_dump` / `pg_restore`**（按顺序尝试，取第一个命中的）：
+
+1. 环境变量 `PGBIN` —— 显式指定 PostgreSQL 的 `bin` 目录，最可靠；
+2. 系统 `PATH` —— 已把 PostgreSQL 加进 PATH 的话无需任何配置；
+3. 常见安装位置 —— Windows 官方安装器（`C:\Program Files\PostgreSQL\<版本>\bin`）、
+   Scoop、macOS Homebrew、Linux 发行版（`/usr/lib/postgresql/*/bin`、`/usr/pgsql-*/bin`）；
+4. 工程内便携版 —— 把 PostgreSQL 解压到 `tools/pgsql/` 或 `.pgsql/` 即可被识别。
+
+如果都不命中，脚本会明确报错并提示设置 `PGBIN`（而不是静默失败）：
+
+```bash
+export PGBIN=/path/to/postgresql/bin && bash tools/backup-db.sh
+```
+
+定时备份（服务器上每天凌晨 3 点）：
+
+```bash
+crontab -e
+0 3 * * * cd /opt/course-selection-system && bash tools/backup-db.sh --keep 14 >> /var/log/course-backup.log 2>&1
+```
+
+### 7.9 持续集成（GitHub Actions）
+
+`.github/workflows/ci.yml` 在两个任务里分别跑：
+
+| 任务 | 内容 |
+| --- | --- |
+| `java-unit` | JDK 21 + Maven 缓存，执行 `mvn test`（78 项），上传 surefire 报告 |
+| `regression` | 起 PostgreSQL 17 service 容器 → 导入 schema 与 seed → 构建 jar → 后台启动 → 依次跑冒烟 / 验收 / 并发 |
+
+失败时自动 dump 后端日志，便于定位。推送与 PR 都会触发。
 
 ## 8. 与设计文档的对应关系
 
@@ -601,6 +701,9 @@ db.query("""
 - **CDN 分发**：静态资源由 Nginx 托管。
 - **会话存储**：登录会话保存在服务端内存（`SessionStore`），进程重启后需要重新登录；
   多实例部署时应替换为 Redis 或数据库。
+- **换课的死锁重试**：两个学生同时互换（A→B 与 B→A）时，双方都先锁自己的原选课记录，
+  理论上可能形成死锁，PostgreSQL 会检测并终止其中一方（`40P01`），当前未做**自动重试**，
+  学生需手动重试一次。改进方式：捕获 `40P01` 后重试一次，或统一按 `offering_id` 升序加锁。
 
 此外，按文档 1.3 的系统边界，本系统不与教务系统、统一认证、支付等外部系统对接，
 学籍与成绩数据以本地数据表维护。

@@ -67,6 +67,40 @@ fi
 APP_PORT="${SERVER_PORT:-3000}"
 APP_ADDR="${SERVER_ADDRESS:-127.0.0.1}"
 
+# ---------- 端口占用预检 ----------
+# 血泪教训：如果端口已被上一次的后端占用，Spring Boot 会在启动末期报
+# "Port 3000 was already in use" 然后退出。此时若用 nohup ... & 后台启动，
+# 脚本会立刻返回、日志被后写的进程覆盖，看起来"启动成功"，
+# 实际跑的还是旧进程 —— 于是 --init 的重建数据库根本没执行，
+# 后续测试却对着脏数据跑，排查半天找不到原因。
+# 所以这里在启动前主动检查，把问题在第一时间暴露出来。
+port_in_use() {
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn 2>/dev/null | grep -qE "[:.]$APP_PORT[[:space:]]"
+  elif command -v netstat >/dev/null 2>&1; then
+    netstat -an 2>/dev/null | grep -E "[:.]$APP_PORT[[:space:]]" | grep -qiE "LISTEN"
+  else
+    return 1
+  fi
+}
+
+if port_in_use; then
+  echo "错误：端口 $APP_PORT 已被占用，无法启动。" >&2
+  echo "占用情况如下：" >&2
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltnp 2>/dev/null | grep -E "[:.]$APP_PORT[[:space:]]" >&2 || true
+  else
+    netstat -ano 2>/dev/null | grep -E "[:.]$APP_PORT[[:space:]]" >&2 || true
+  fi
+  echo >&2
+  echo "请先停掉占用该端口的进程（通常是上一次启动的后端）：" >&2
+  echo "  Linux/macOS:  pkill -f course-selection-backend" >&2
+  echo "  Windows:      taskkill /F /IM java.exe" >&2
+  echo "或换一个端口启动：" >&2
+  echo "  SERVER_PORT=3001 bash tools/run-backend.sh${INIT_ARG:+ --init}" >&2
+  exit 1
+fi
+
 echo "监听 http://${APP_ADDR}:${APP_PORT}"
 exec "$JAVA" -jar "$JAR" \
   --server.port="$APP_PORT" \

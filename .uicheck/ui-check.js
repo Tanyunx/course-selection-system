@@ -59,6 +59,11 @@ async function boot(dom, esmDir) {
   globalThis.Node = dom.window.Node;
   globalThis.Event = dom.window.Event;
   globalThis.CustomEvent = dom.window.CustomEvent;
+  // 前端模块里会裸用这些浏览器全局（如课表导出的 new Blob / new MouseEvent）。
+  // jsdom 都有实现，只是默认没挂到 Node 的 globalThis 上；不显式注入的话，
+  // ESM 会解析到 Node 自带的同名全局，行为与浏览器不一致，测试结论会失真。
+  globalThis.Blob = dom.window.Blob;
+  globalThis.MouseEvent = dom.window.MouseEvent;
   try {
     Object.defineProperty(globalThis, 'navigator', { value: dom.window.navigator, configurable: true });
   } catch (_) {
@@ -246,6 +251,72 @@ async function main() {
     await wait(1200);
   } else {
     check('勾选后压缩为有课节次', false, '未找到紧凑模式开关');
+  }
+
+  // 课表导出（CSV / ICS）
+  const csvBtn = doc.getElementById('btn-export-csv');
+  const icsBtn = doc.getElementById('btn-export-ics');
+  check('课表页提供「导出 Excel」按钮', !!csvBtn);
+  check('课表页提供「导出日历」按钮', !!icsBtn);
+
+  // jsdom 未实现 URL.createObjectURL（真实浏览器都有），需要补一个 polyfill，
+  // 否则导出函数内部会抛 "createObjectURL is not a function"，
+  // 而它被 try/catch 捕获后只弹一个失败提示 —— 测试就永远发现不了内容对不对。
+  const captured = [];
+  if (!dom.window.URL.createObjectURL) {
+    dom.window.URL.createObjectURL = function (blob) {
+      captured.push(blob);
+      return 'blob:polyfill-' + captured.length;
+    };
+  } else {
+    const orig = dom.window.URL.createObjectURL.bind(dom.window.URL);
+    dom.window.URL.createObjectURL = function (blob) {
+      captured.push(blob);
+      return orig(blob);
+    };
+  }
+  if (!dom.window.URL.revokeObjectURL) dom.window.URL.revokeObjectURL = function () {};
+
+  // 阻止真实导航（jsdom 里点击 <a download> 会尝试跳转）
+  const origClick = dom.window.HTMLAnchorElement.prototype.click;
+  dom.window.HTMLAnchorElement.prototype.click = function () { /* 阻止真实下载 */ };
+
+  if (csvBtn && icsBtn) {
+    csvBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await wait(300);
+    check('点击后生成了导出文件（CSV）', captured.length >= 1, `捕获 ${captured.length} 个 Blob`);
+
+    icsBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    await wait(300);
+    check('点击后生成了导出文件（ICS）', captured.length >= 2, `累计 ${captured.length} 个 Blob`);
+
+    // 读取 Blob 文本内容做结构级校验（而不是只看"点了没报错"）
+    if (captured.length >= 2) {
+      const csvBlob = captured[captured.length - 2];
+      const icsBlob = captured[captured.length - 1];
+      const csvText = await csvBlob.text();
+      const icsText = await icsBlob.text();
+
+      check('CSV 含课程明细表头',
+        /课程名称/.test(csvText) && /学分/.test(csvText) && /上课时间/.test(csvText));
+      check('CSV 含周视图网格', /【周视图】/.test(csvText), '');
+
+      // BOM 必须查原始字节：jsdom 的 blob.text() 解码时会剥掉前导 U+FEFF，
+      // 用 text().charCodeAt(0) 判会永远失败——那是测试环境的解码行为，不是文件本身没 BOM。
+      const csvBytes = new Uint8Array(await csvBlob.arrayBuffer());
+      const hasBom = csvBytes[0] === 0xEF && csvBytes[1] === 0xBB && csvBytes[2] === 0xBF;
+      check('CSV 首字节为 UTF-8 BOM（Excel 打开中文不乱码）', hasBom,
+        hasBom ? 'EF BB BF' : `实际 ${[...csvBytes.slice(0, 3)].map((x) => x.toString(16)).join(' ')}`);
+
+      check('ICS 含 VCALENDAR 头尾',
+        /BEGIN:VCALENDAR/.test(icsText) && /END:VCALENDAR/.test(icsText));
+      check('ICS 含至少一个 VEVENT', /BEGIN:VEVENT/.test(icsText) && /END:VEVENT/.test(icsText));
+      check('ICS 含 RRULE 周重复规则', /RRULE:FREQ=WEEKLY/.test(icsText), '');
+      check('ICS 含提前提醒 VALARM', /BEGIN:VALARM/.test(icsText) && /TRIGGER:-PT15M/.test(icsText));
+      check('ICS 指定时区 Asia/Shanghai', /X-WR-TIMEZONE:Asia\/Shanghai/.test(icsText));
+    }
+
+    dom.window.HTMLAnchorElement.prototype.click = origClick;
   }
 
   // 课时表（选课规则页）

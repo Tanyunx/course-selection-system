@@ -77,7 +77,15 @@
       "problemMatcher": []
     },
     {
-      "label": "测试 · 前端集成（53 项）",
+      "label": "测试 · Java 单元测试（78 项）",
+      "detail": "JUnit 5 纯逻辑单测，不依赖数据库：热度分档边界、冲突文案、占位符展开、限速与幂等、死锁重试判定",
+      "type": "shell",
+      "command": "cd backend && ./mvnw -B -ntp test -s ../tools/maven-settings.xml",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "测试 · 前端集成（65 项）",
       "type": "shell",
       "command": "cd .uicheck && node ui-check.js",
       "options": { "cwd": "${workspaceFolder}" },
@@ -108,12 +116,28 @@
       "problemMatcher": []
     },
     {
-      "label": "测试 · 全部（249 项）",
-      "detail": "串行跑完七套测试，需要后端已在 3000 运行",
+      "label": "测试 · 全部（327 项）",
+      "detail": "串行跑完八套测试，需要后端已在 3000 运行",
       "type": "shell",
-      "command": "node tools/test-engine.js && node tests/smoke.js && set -a && . backend/.env && set +a && node tests/acceptance.js && node tests/concurrency.js && (cd .uicheck && node static-check.js) && (cd .uicheck && node dist-check.js) && (cd .uicheck && node ui-check.js)",
+      "command": "node tools/test-engine.js && node tests/smoke.js && set -a && . backend/.env && set +a && node tests/acceptance.js && node tests/concurrency.js && (cd .uicheck && node static-check.js) && (cd .uicheck && node dist-check.js) && (cd .uicheck && node ui-check.js) && (cd backend && ./mvnw -B -ntp -q test -s ../tools/maven-settings.xml)",
       "options": { "cwd": "${workspaceFolder}", "shell": { "executable": "bash" } },
       "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
+      "label": "运维 · 备份数据库",
+      "detail": "pg_dump 自定义格式导出到 backups/，保留最近 10 份，同时生成纯文本 .sql",
+      "type": "shell",
+      "command": "bash tools/backup-db.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "运维 · 恢复数据库",
+      "detail": "用法：bash tools/restore-db.sh backups/xxx.dump（会二次确认，并自动生成恢复前快照）",
+      "type": "shell",
+      "command": "bash tools/restore-db.sh",
+      "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": []
     },
     {

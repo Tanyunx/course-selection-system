@@ -12,6 +12,11 @@ backend/target/
 
 # 数据库与服务器备份
 *.dump
+backups/
+
+# 种子数据的「已替换口令哈希」中间产物（只在导入瞬间存在，绝不入库）
+seed-ready.sql
+*-ready.sql
 
 # 开发期前端验证工具的依赖与临时产物（源码保留）
 .uicheck/node_modules/

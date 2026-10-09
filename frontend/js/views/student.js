@@ -8,6 +8,7 @@ import {
   statusBadge, heatBadge, heatProgress, debounce, fmtTime, relativeTime,
   WEEKDAY_TEXT, PARITY_TEXT, PERIOD_TIME, PERIOD_BAND, PERIOD_GROUP, PERIOD_COUNT,
 } from '../ui.js';
+import { exportCsv, exportIcs } from '../exportSchedule.js';
 
 /* ==================================================================
    通用：选课 / 候补 / 退课 操作
@@ -472,11 +473,13 @@ async function openCourseDetail(offeringId, ctx) {
 export async function renderTimetable(root, ctx) {
   let parity = '';
   let compact = false;
+  let latest = null;   // 缓存最近一次课表数据，导出时直接用，不再请求
 
   const paint = async () => {
     const wrap = $('#tt-wrap');
     wrap.innerHTML = loadingState('正在生成课表…');
     const d = await api.get('/api/timetable', parity === '' ? {} : { parity });
+    latest = d;
     wrap.innerHTML = buildTimetable(d, compact);
     $('#tt-summary').textContent = `共 ${d.courseCount} 门课程、${d.totalCredit} 学分，课表时段 ${d.cells.length} 个`;
     $('#btn-print').onclick = () => window.print();
@@ -500,7 +503,9 @@ export async function renderTimetable(root, ctx) {
           <input type="checkbox" id="tt-compact" />
           <span>只看有课节次</span>
         </label>
-        <button class="btn" id="btn-print">打印 / 导出</button>
+        <button class="btn" id="btn-export-csv" title="导出为 Excel 可直接打开的 CSV">导出 Excel</button>
+        <button class="btn" id="btn-export-ics" title="导出为可导入手机日历的文件">导出日历</button>
+        <button class="btn" id="btn-print">打印</button>
       </div>
     </div>
     <div class="card">
@@ -520,6 +525,27 @@ export async function renderTimetable(root, ctx) {
     compact = e.target.checked;
     await paint();
   };
+
+  $('#btn-export-csv').onclick = () => {
+    if (!latest || !latest.cells.length) return toast('本学期还没有已选课程，暂无可导出的课表', 'warn');
+    try {
+      exportCsv(latest, '当前学期');
+      toast('已导出 CSV，可直接用 Excel 打开', 'success');
+    } catch (e) {
+      toast('导出失败：' + (e && e.message ? e.message : e), 'error');
+    }
+  };
+
+  $('#btn-export-ics').onclick = () => {
+    if (!latest || !latest.cells.length) return toast('本学期还没有已选课程，暂无可导出的课表', 'warn');
+    try {
+      exportIcs(latest, '当前学期');
+      toast('已导出日历文件，可在手机日历中导入', 'success');
+    } catch (e) {
+      toast('导出失败：' + (e && e.message ? e.message : e), 'error');
+    }
+  };
+
   await paint();
 }
 

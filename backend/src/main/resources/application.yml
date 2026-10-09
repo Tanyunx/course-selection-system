@@ -11,10 +11,18 @@ server:
   error:
     whitelabel:
       enabled: false
+  # 优雅停机：收到 SIGTERM（systemctl restart / stop）后先拒绝新请求，
+  # 等待正在处理的请求（尤其是"占名额 + 校验 + 落库"这类事务）跑完再退出，
+  # 避免演示时重启服务把学生刚提交的选课截断在半个事务里。
+  shutdown: graceful
 
 spring:
   application:
     name: course-selection-backend
+
+  # 与 server.shutdown=graceful 配套：最多等 30 秒让在途请求收尾，否则强制退出。
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
 
   # ---------------------------------------------------------------
   # PostgreSQL 数据源
@@ -31,6 +39,13 @@ spring:
       minimum-idle: 2
       pool-name: CourseSelectionPool
       connection-timeout: 10000
+      # 取连接前的存活校验超时：网络抖动时快速失败，而不是把请求线程挂在这里
+      validation-timeout: 3000
+      # 连接最长存活 30 分钟：短于 PostgreSQL 与云厂商 NAT 的常见空闲回收时间，
+      # 主动换掉连接可以避免"连接看似可用、实际已被对端关闭"的偶发通信失败
+      max-lifetime: 1800000
+      # 空闲连接的保活探测，防止 2 核 2G 小机器上连接被中间设备静默回收
+      keepalive-time: 300000
       # 数据库全部使用 timestamp without time zone，会话时区固定为上海，
       # 与 Node 版 timezone:'local' 的行为保持一致
       connection-init-sql: SET TIME ZONE 'Asia/Shanghai'

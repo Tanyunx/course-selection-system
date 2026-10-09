@@ -7,19 +7,62 @@
 #   2. 创建应用账号与数据库（已存在则跳过）
 #   3. 以应用账号身份导入 backend/src/main/resources/db/schema-pg.sql
 #
-# 依赖：本地免安装 PostgreSQL 实例（见 .workbuddy/binaries/pgsql/pgctl.sh）
-#      默认监听 127.0.0.1:55432，超级用户 postgres
+# 依赖：本地 PostgreSQL 实例（可使用官方安装器、发行版包管理器，
+#       或工程内自带的免安装便携版）
+#       默认监听 127.0.0.1:55432，超级用户 postgres
+#
+# 可用环境变量覆盖（都有合理默认值，通常无需设置）：
+#   PGROOT     PostgreSQL 根目录（其下应有 pgsql/bin 或 bin）
+#   PGPORT     实例端口，默认 55432
+#   PYTHON     用于生成随机口令的 Python 解释器
 #
 # 用法：bash tools/pg-setup.sh
 # ---------------------------------------------------------------
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PGROOT="C:/Users/TAN30/.workbuddy/binaries/pgsql"
-PGBIN="$PGROOT/pgsql/bin"
-PGPORT=55432
-SUPERPW="$(cat "$PGROOT/superuser.pw")"
-PY="C:/Users/TAN30/.workbuddy/binaries/python/versions/3.13.12/python.exe"
+
+# ---------- 0. 定位 PostgreSQL 与 Python ----------
+# PostgreSQL 根目录：优先环境变量，其次工程内便携版，最后探常见安装位置
+if [ -n "${PGROOT:-}" ]; then
+  :
+elif [ -d "$ROOT/.pgsql" ]; then
+  PGROOT="$ROOT/.pgsql"
+elif [ -d "$ROOT/tools/pgsql" ]; then
+  PGROOT="$ROOT/tools/pgsql"
+else
+  PGROOT=""
+fi
+
+# bin 目录可能直接在 PGROOT 下，也可能在 PGROOT/pgsql 下（官方 zip 解压后的形态）
+if [ -n "$PGROOT" ] && [ -d "$PGROOT/pgsql/bin" ]; then
+  PGBIN="$PGROOT/pgsql/bin"
+elif [ -n "$PGROOT" ] && [ -d "$PGROOT/bin" ]; then
+  PGBIN="$PGROOT/bin"
+elif command -v psql >/dev/null 2>&1; then
+  PGBIN="$(dirname "$(command -v psql)")"
+else
+  PGBIN=""
+fi
+
+PGPORT="${PGPORT:-55432}"
+# 超级用户口令：优先环境变量，其次 PGROOT/superuser.pw
+if [ -n "${PGSUPERPW:-}" ]; then
+  SUPERPW="$PGSUPERPW"
+elif [ -n "$PGROOT" ] && [ -f "$PGROOT/superuser.pw" ]; then
+  SUPERPW="$(cat "$PGROOT/superuser.pw")"
+else
+  SUPERPW=""
+fi
+
+# Python：优先环境变量，其次 PATH，最后报错
+PY="${PYTHON:-}"
+if [ -z "$PY" ]; then
+  if command -v python3 >/dev/null 2>&1; then PY="$(command -v python3)"
+  elif command -v python >/dev/null 2>&1; then PY="$(command -v python)"
+  else echo "[失败] 找不到 Python，请设置 PYTHON 环境变量指向解释器。" >&2; exit 1
+  fi
+fi
 
 ENVFILE="$ROOT/backend/.env"
 DB_NAME="course_selection"

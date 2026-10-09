@@ -144,6 +144,8 @@ function buildFrontend() {
 
   parts.push('/* ================= 前端界面层 ================= */');
   parts.push(stripModule(read(path.join(dir, 'ui.js'))));
+  // 课表导出依赖 ui.js 的 PERIOD_TIME / WEEKDAY_TEXT，必须排在其后
+  parts.push(stripModule(read(path.join(dir, 'exportSchedule.js'))));
   parts.push(buildApi());
   parts.push(stripModule(read(path.join(dir, 'scheduleEditor.js'))));
 
