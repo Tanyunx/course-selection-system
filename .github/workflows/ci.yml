@@ -113,11 +113,18 @@ jobs:
           # seed 里的口令占位符要替换成真实 BCrypt 哈希。
           # 演示口令取自 CI secret（该库是一次性容器，与任何真实环境无关）；
           # 若未配置 secret 则回退到种子注释里公开的演示口令，保证 fork 后也能跑通。
-          # bcryptjs 装在 tests/node_modules，这里用 NODE_PATH 指过去。
-          # 注意：生成的 seed-ready.sql 含真实哈希，用完立即删除，且已被 .gitignore 排除。
-          NODE_PATH="$(pwd)/../../../tests/node_modules" node -e "
+          #
+          # 注意两点（都踩过）：
+          #   1. bcryptjs 装在 tests/node_modules，用「解析出的绝对路径」require 它 ——
+          #      NODE_PATH 在较新的 Node 里对 -e/--eval 已不再生效，靠它必然 MODULE_NOT_FOUND；
+          #   2. 本目录到仓库根是 5 层（db → resources → main → src → backend → 根），
+          #      用 GITHUB_WORKSPACE 拼接就不会数错。
+          # 生成的 seed-ready.sql 含真实哈希，用完立即删除，且已被 .gitignore 排除。
+          node -e "
             const fs = require('fs');
-            const bcrypt = require('bcryptjs');
+            const path = require('path');
+            const root = process.env.GITHUB_WORKSPACE || path.resolve(process.cwd(), '../../../../../');
+            const bcrypt = require(path.join(root, 'tests/node_modules/bcryptjs'));
             const pwd = process.env.CI_DEMO_PASSWORD || '123456';
             const hash = bcrypt.hashSync(pwd, 10);
             const sql = fs.readFileSync('seed-pg.sql', 'utf8').split('__PWD_HASH__').join(hash);
