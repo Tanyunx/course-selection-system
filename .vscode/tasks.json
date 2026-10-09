@@ -77,6 +77,14 @@
       "problemMatcher": []
     },
     {
+      "label": "测试 · 多人选课高压压测（23 项，约 3 分钟）",
+      "detail": "需在刚 --init 的干净库上运行：8 人×3 轮反复抢同一门课、同一 requestId 并发 10 连发、同一学生不同 requestId 并发 6 连发、并发退课+候补递补名额守恒、两人并发换课。含 3 次限速窗口等待（可用 STRESS_COOLDOWN_SECONDS=0 跳过）。",
+      "type": "shell",
+      "command": "set -a && . backend/.env && set +a && node tests/stress.js",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
       "label": "测试 · Java 单元测试（78 项）",
       "detail": "JUnit 5 纯逻辑单测，不依赖数据库：热度分档边界、冲突文案、占位符展开、限速与幂等、死锁重试判定",
       "type": "shell",
@@ -116,12 +124,20 @@
       "problemMatcher": []
     },
     {
-      "label": "测试 · 全部（327 项）",
-      "detail": "串行跑完八套测试，需要后端已在 3000 运行",
+      "label": "测试 · 全部（339 项，不含压测）",
+      "detail": "串行跑完八套测试，需要后端已在 3000 运行。不含 23 项压测——压测必须在刚 --init 的干净库上单独跑。",
       "type": "shell",
       "command": "node tools/test-engine.js && node tests/smoke.js && set -a && . backend/.env && set +a && node tests/acceptance.js && node tests/concurrency.js && (cd .uicheck && node static-check.js) && (cd .uicheck && node dist-check.js) && (cd .uicheck && node ui-check.js) && (cd backend && ./mvnw -B -ntp -q test -s ../tools/maven-settings.xml)",
       "options": { "cwd": "${workspaceFolder}", "shell": { "executable": "bash" } },
       "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
+      "label": "测试 · 全部 + 压测（约 3 分钟额外）",
+      "detail": "先 --init 重建干净库并启动后端，再跑压测。之所以不放上面那条，是因为压测会往库里插测试开课、且需要完整的限速额度，必须独占一个干净的库。",
+      "type": "shell",
+      "command": "bash tools/run-backend.sh --init > /tmp/backend-stress.log 2>&1 & sleep 8 && node tests/stress.js",
+      "options": { "cwd": "${workspaceFolder}", "shell": { "executable": "bash" } },
       "problemMatcher": []
     },
     {

@@ -123,6 +123,64 @@ public class EnrollmentService {
         return sb.toString();
     }
 
+    /**
+     * 预检选课资格（6.1 的 1~4 步）。
+     *
+     * <p>这里在事务<b>外</b>先查一遍「是否已选 / 是否已在候补」，把绝大多数重复提交
+     * 挡在事务之外，避免为了一个必然失败的请求去占用行锁与名额。
+     * 但它挡不住「首次并发」——同一名学生几乎同时发出的 N 个请求会同时读到"还没选"，
+     * 因此事务内还会用 PostgreSQL 咨询锁把同一 (学生, 开课) 串行化，见
+     * {@link #lockEnrollmentPair(long, long)}。
+     */
+    private void assertNotEnrolledYet(long studentId, long offeringId) {
+        Map<String, Object> dup = db.queryOne(
+                "SELECT status FROM t_enrollment WHERE student_id = ? AND offering_id = ?",
+                studentId, offeringId);
+        if (dup != null && Db.num(dup, "status") == 1) {
+            throw new BizException(ErrorCode.DUPLICATE_ENROLL);
+        }
+        Map<String, Object> wl = db.queryOne(
+                "SELECT queue_no FROM t_waitlist WHERE student_id = ? AND offering_id = ? AND status = 1",
+                studentId, offeringId);
+        if (wl != null) {
+            throw new BizException(ErrorCode.DUPLICATE_WAITLIST,
+                    "你已加入候补，当前排位为第 " + Db.num(wl, "queue_no") + " 位",
+                    Map.of("queueNo", Db.num(wl, "queue_no")));
+        }
+    }
+
+    /**
+     * 把「同一名学生对同一门开课」的选课/换课串行化。
+     *
+     * <p><b>为什么必须有这一道锁：</b>
+     * 幂等缓存（{@link Guard#idempotent}）按 requestId 去重，能挡住"重发同一个请求"。
+     * 但如果学生（或脚本）在极短时间内用<b>不同</b> requestId 并发提交同一个选课，
+     * 幂等缓存全部落空：N 个事务同时执行「查重 → 占名额 → 写记录」，
+     * 查重时都读到"未选"，于是都去占名额；最后唯一约束
+     * {@code uk_student_offering} 只允许一条 {@code t_enrollment} 落库，
+     * 其余事务回滚 —— <b>名额却已经被这几条并发请求加了好几次</b>，
+     * 于是 {@code t_course_offering.enrolled} 与真实选课记录数脱节，
+     * 该课会凭空"少掉"若干个名额，把后来者挡在门外。
+     *
+     * <p>这道锁用 PostgreSQL 的<b>事务级咨询锁</b>（{@code pg_advisory_xact_lock}）
+     * 实现，键由 (学生 id, 开课 id) 哈希得到：
+     * <ul>
+     *   <li>它在<b>数据库层面</b>生效，跨线程、跨连接池、跨多实例都有效，
+     *       不依赖应用内的 synchronized（那在多实例部署下会失效）；</li>
+     *   <li>事务提交/回滚时<b>自动释放</b>，不存在忘记解锁导致死锁的风险；</li>
+     *   <li>不同学生选不同课互不影响，不会把整个选课接口串行化。</li>
+     * </ul>
+     *
+     * <p>持锁后重新查一次重复：前一个刚提交的事务如果已经写下选课记录，
+     * 后面这些请求就会立即以 2006 失败，而不是再去占一次名额。
+     */
+    private void lockEnrollmentPair(long studentId, long offeringId) {
+        // 把二元组折成一个 bigint 键：高位放学生 id、低位放开课 id。
+        // 两者都在 int 范围内，拼接后不会溢出，且同一个二元组必然得到同一个键。
+        long key = studentId * 1_000_000L + offeringId;
+        db.queryOne("SELECT pg_advisory_xact_lock(?)", key);
+    }
+
     /* ------------------------------------------------------------------ */
     /* 选课（6.1）                                                          */
     /* ------------------------------------------------------------------ */
@@ -150,27 +208,18 @@ public class EnrollmentService {
         // 3) 批次准入
         Map<String, Object> batch = rules.assertInBatch(termId, student);
 
-        // 4) 重复校验
-        Map<String, Object> dup = db.queryOne(
-                "SELECT status FROM t_enrollment WHERE student_id = ? AND offering_id = ?",
-                studentId, offeringId);
-        if (dup != null && Db.num(dup, "status") == 1) {
-            throw new BizException(ErrorCode.DUPLICATE_ENROLL);
-        }
-        Map<String, Object> wl = db.queryOne(
-                "SELECT queue_no FROM t_waitlist WHERE student_id = ? AND offering_id = ? AND status = 1",
-                studentId, offeringId);
-        if (wl != null) {
-            throw new BizException(ErrorCode.DUPLICATE_WAITLIST,
-                    "你已加入候补，当前排位为第 " + Db.num(wl, "queue_no") + " 位",
-                    Map.of("queueNo", Db.num(wl, "queue_no")));
-        }
+        // 4) 重复校验 —— 事务外的快速失败（挡掉绝大多数重复提交，省下一次加锁）
+        assertNotEnrolledYet(studentId, offeringId);
 
         BigDecimal credit = Db.decimal(offering, "credit");
         long courseId = Db.num(offering, "course_id");
         final List<Map<String, Object>> tightTransfers = new ArrayList<>();
 
         RuleService.CreditCheck creditCheck = db.withTransaction(() -> {
+            // 4') 串行化同一 (学生, 开课)：持锁后重查，防止并发请求重复占名额
+            lockEnrollmentPair(studentId, offeringId);
+            assertNotEnrolledYet(studentId, offeringId);
+
             // 5) 条件更新占名额
             occupySeat(offeringId);
 
@@ -311,6 +360,11 @@ public class EnrollmentService {
 
         try {
             db.inTransaction(() -> {
+                // 0) 串行化同一 (学生, 目标开课)：与 enroll 共用同一把咨询锁。
+                //    否则两人（或同一人两个请求）同时换到同一门课时，
+                //    会各自 occupySeat 成功、再在唯一约束上撞车回滚，把名额白扣掉。
+                lockEnrollmentPair(studentId, toOfferingId);
+
                 // 1) 校验原选课记录并加行锁
                 Map<String, Object> src = db.queryOne("""
                         SELECT * FROM t_enrollment
@@ -318,6 +372,15 @@ public class EnrollmentService {
                         """, studentId, fromOfferingId);
                 if (src == null) {
                     throw new BizException(ErrorCode.NOT_ENROLLED, "你尚未选修原课程，无法换课");
+                }
+
+                // 1') 目标课程若在并发中已被自己选上，直接按"已选"拒绝，不再占名额
+                Map<String, Object> already = db.queryOne("""
+                        SELECT status FROM t_enrollment
+                         WHERE student_id = ? AND offering_id = ? AND status = 1
+                        """, studentId, toOfferingId);
+                if (already != null) {
+                    throw new BizException(ErrorCode.DUPLICATE_ENROLL, "你已选修目标课程");
                 }
 
                 // 2) 预占目标开课名额

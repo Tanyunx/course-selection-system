@@ -170,6 +170,41 @@ jobs:
         working-directory: tests
         run: node concurrency.js
 
+      # 高压压测必须在「刚 --init 过的干净库」上跑：
+      # 它会往 t_course_offering 插若干测试开课（"压力测试校区"），
+      # 且每个场景都要占用学生完整的限速额度（软 10 / 硬 20 次每 60 秒）。
+      # 因此先重建库再单独跑，避免被前面的测试污染或吃掉额度。
+      - name: 重建数据库（为压测准备干净环境）
+        env:
+          DB_INIT: "true"
+        run: |
+          pkill -f course-selection-backend || true
+          sleep 2
+          nohup java -jar backend/target/course-selection-backend.jar \
+            --server.port=3000 --server.address=127.0.0.1 \
+            --app.db.init-on-startup=true > /tmp/backend-stress.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
+              echo "后端已就绪（第 ${i} 次探测）"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "后端启动超时，日志如下："
+          cat /tmp/backend-stress.log
+          exit 1
+
+      # 压测含 3 次限速窗口等待（各 62 秒），合计约 3 分钟。
+      # CI 里保留等待：限速本身就是被验证的行为之一，跳过会得到假红。
+      - name: 多人选课高压压测
+        working-directory: tests
+        timeout-minutes: 12
+        run: node stress.js
+
       - name: 失败时输出后端日志
         if: failure()
-        run: cat /tmp/backend.log
+        run: |
+          echo "===== /tmp/backend.log ====="
+          cat /tmp/backend.log 2>/dev/null || echo "(无)"
+          echo "===== /tmp/backend-stress.log ====="
+          cat /tmp/backend-stress.log 2>/dev/null || echo "(无)"

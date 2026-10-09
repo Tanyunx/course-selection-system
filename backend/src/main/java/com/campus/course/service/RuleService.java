@@ -163,6 +163,20 @@ public class RuleService {
         }
         String placeholders = placeholders(exclude.size());
 
+        // 注意：`NOT IN (?,?)` 里的占位符是**显式展开**的，不是 `IN (?)` 形式，
+        // 所以 Db.prepare 不会去展开集合参数——必须把 exclude 逐个摊平成独立参数。
+        // 历史 bug：这里曾把 exclude 整个 List 当成一个参数传进去（`…, exclude.toArray()`），
+        // 于是第 5 个占位符拿不到参数、抛 IllegalArgumentException，
+        // 换课接口直接 9002。普通选课路径因为 exclude 只有 1 个元素而侥幸不报错，
+        // 只有"换课"（排除原课程，exclude 有 2 个元素）才会触发，因此长期没被发现。
+        Object[] args = new Object[3 + exclude.size()];
+        args[0] = studentId;
+        args[1] = termId;
+        args[2] = offeringId;
+        for (int i = 0; i < exclude.size(); i++) {
+            args[3 + i] = exclude.get(i);
+        }
+
         List<Map<String, Object>> conflicts = db.query("""
                 SELECT DISTINCT
                        c.name            AS course_name,
@@ -188,7 +202,7 @@ public class RuleService {
                   JOIN t_course_offering o2 ON o2.id = s2.offering_id AND o2.term_id = ?
                   JOIN t_course c ON c.id = o2.course_id
                  WHERE s1.offering_id = ? AND s2.offering_id NOT IN (""" + placeholders + ")",
-                studentId, termId, offeringId, exclude.toArray());
+                args);
 
         List<Map<String, Object>> tightTransfers = db.query("""
                 SELECT DISTINCT
@@ -211,7 +225,7 @@ public class RuleService {
                   JOIN t_course_offering o2 ON o2.id = s2.offering_id AND o2.term_id = ?
                   JOIN t_course c ON c.id = o2.course_id
                  WHERE s1.offering_id = ? AND s2.offering_id NOT IN (""" + placeholders + ")",
-                studentId, termId, offeringId, exclude.toArray());
+                args);
 
         return new ConflictResult(conflicts, tightTransfers);
     }

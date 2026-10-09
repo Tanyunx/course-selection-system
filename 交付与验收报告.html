@@ -138,7 +138,7 @@
     <div><b>运行环境</b>Linux（Ubuntu LTS）+ Nginx + systemd</div>
     <div><b>构建</b>Maven 3.9 + JDK 21（LTS）</div>
     <div><b>源码托管</b>GitHub：Tanyunx/course-selection-system</div>
-    <div><b>验收结论</b><span class="badge b-ok">339 项断言全部通过</span></div>
+    <div><b>验收结论</b><span class="badge b-ok">362 项断言全部通过</span></div>
   </div>
 </header>
 
@@ -151,7 +151,7 @@
       <tr><td>数据库</td><td>18 张表、约束/索引/外键、<code>updated_at</code> 触发器、演示数据</td><td><code>backend/src/main/resources/db/</code></td><td><span class="badge b-ok">已完成</span></td></tr>
       <tr><td>前端</td><td>原生 HTML + CSS + ES Module，四端界面，由 Nginx 托管</td><td><code>frontend/</code></td><td><span class="badge b-ok">已完成</span></td></tr>
       <tr><td>阶段一产物</td><td>免安装单文件网页（本地 JSON mock，对应"先用 mock 数据"）</td><td><code>选课系统-单文件版.html</code></td><td><span class="badge b-ok">已完成</span></td></tr>
-      <tr><td>测试</td><td>Java 单元测试 78 + 冒烟 19 + 验收 15 + 并发 17 + 前端集成 65 + 单文件界面 51 + 分发包一致性 20 + 规则引擎 74</td><td><code>backend/src/test/</code>、<code>tests/</code>、<code>.uicheck/</code>、<code>tools/</code></td><td><span class="badge b-ok">339/339 通过</span></td></tr>
+      <tr><td>测试</td><td>Java 单元测试 78 + 冒烟 19 + 验收 15 + 并发 17 + <b>多人选课压测 23</b> + 前端集成 65 + 单文件界面 51 + 分发包一致性 20 + 规则引擎 74</td><td><code>backend/src/test/</code>、<code>tests/</code>、<code>.uicheck/</code>、<code>tools/</code></td><td><span class="badge b-ok">362/362 通过</span></td></tr>
       <tr><td>运维脚本</td><td>数据库备份 / 恢复（<code>backup-db.sh</code> / <code>restore-db.sh</code>），恢复前自动备份 + 二次确认</td><td><code>tools/</code></td><td><span class="badge b-ok">已完成</span></td></tr>
       <tr><td>持续集成</td><td>GitHub Actions：Java 单测 + 全链路回归（含 PostgreSQL service 容器）</td><td><code>.github/workflows/ci.yml</code></td><td><span class="badge b-ok">已完成</span></td></tr>
       <tr><td>部署脚本</td><td>Ubuntu 一键部署：JDK + PostgreSQL + systemd + Nginx + HTTPS</td><td><code>deploy.sh</code></td><td><span class="badge b-ok">已完成</span></td></tr>
@@ -169,6 +169,7 @@
     <div class="kpi"><div class="n">19/19</div><div class="l">接口冒烟测试</div></div>
     <div class="kpi"><div class="n">15/15</div><div class="l">端到端验收（TC-01~15）</div></div>
     <div class="kpi"><div class="n">17/17</div><div class="l">并发 / 幂等 / 递补</div></div>
+    <div class="kpi"><div class="n">23/23</div><div class="l">多人选课高压压测</div></div>
     <div class="kpi"><div class="n">65/65</div><div class="l">前端集成（jsdom）</div></div>
     <div class="kpi"><div class="n">51/51</div><div class="l">单文件界面</div></div>
     <div class="kpi"><div class="n">20/20</div><div class="l">分发包一致性</div></div>
@@ -204,6 +205,11 @@
         <td><span class="badge b-ok">17/17</span></td>
       </tr>
       <tr>
+        <td><code>tests/stress.js</code><br />23 项</td>
+        <td><b>多人选课高压压测</b>（需独占刚重建的干净库）。四条不变量：不超卖 / 不重复 / 不丢名额 / 冗余列不失真。五个场景：8 人×3 轮反复抢容量 3 的课；同一学生同 requestId 并发 10 连发；同一学生<b>不同</b> requestId 并发 6 连发（绕过幂等）；2 人在读+3 人候补并发退课验证名额守恒与递补顺序；两人并发换课到只剩 1 个名额的课。<b>上线首跑即抓出两个真实缺陷</b>（并发名额泄漏、换课接口 9002），均已修复</td>
+        <td><span class="badge b-ok">23/23</span></td>
+      </tr>
+      <tr>
         <td><code>.uicheck/ui-check.js</code><br />65 项</td>
         <td>jsdom 加载真实页面并对接真实后端，真实执行前端 ES Module：四角色登录、按角色生成菜单、逐页渲染、课程卡片状态标签、课表 13 节与时段列、二次确认、验证码流程；<b>课表导出（CSV / ICS）内容级校验</b>——CSV 表头与周视图、UTF-8 BOM 字节、ICS 的 <code>VCALENDAR</code>/<code>VEVENT</code>/<code>RRULE</code>/<code>VALARM</code> 与时区；并统计未捕获异常与控制台错误</td>
         <td><span class="badge b-ok">65/65</span></td>
@@ -226,8 +232,8 @@
     </tbody>
     <tfoot>
       <tr>
-        <th colspan="2">八套合计（78 + 19 + 15 + 17 + 65 + 51 + 20 + 74）</th>
-        <th><span class="badge b-ok">339 / 339 全部通过</span></th>
+        <th colspan="2">九套合计（78 + 19 + 15 + 17 + 23 + 65 + 51 + 20 + 74）</th>
+        <th><span class="badge b-ok">362 / 362 全部通过</span></th>
       </tr>
     </tfoot>
   </table>
